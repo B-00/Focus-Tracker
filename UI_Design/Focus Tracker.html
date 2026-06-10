@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focus Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- titlebar -->
+  <div class="titlebar">
+    <div class="traffic"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    <div class="ttl">Focus Tracker</div>
+  </div>
+
+  <div class="body">
+
+    <!-- icon rail -->
+    <nav class="rail">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="3.4" fill="#fff"/></svg>
+      </div>
+      <div class="rail-group">
+        <button class="rail-btn active" data-screen="dashboard" title="Dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>
+        </button>
+        <button class="rail-btn" data-screen="documents" title="Documents">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z" stroke-linejoin="round"/><path d="M13 3v5h5"/></svg>
+        </button>
+        <button class="rail-btn" data-screen="calendar" title="Calendar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>
+        </button>
+      </div>
+      <div class="rail-sep"></div>
+      <div class="rail-group">
+        <button class="rail-btn" data-screen="projects" title="Projects">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.7 7.7 11 15.3M16.3 7.7 13 15.3M8 6h8"/></svg>
+        </button>
+        <button class="rail-btn" data-screen="analytics" title="Analytics">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/></svg>
+        </button>
+        <button class="rail-btn" data-screen="messages" title="Messages">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H9l-4 3.5V16H4z" stroke-linejoin="round"/></svg>
+          <span class="badge">2</span>
+        </button>
+      </div>
+      <div class="rail-spacer"></div>
+      <div class="rail-group">
+        <button class="rail-btn mic" title="Record">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+        </button>
+        <button class="rail-btn" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+        </button>
+        <button class="rail-btn" title="Support">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 13v-1a7 7 0 0 1 14 0v1"/><rect x="3.5" y="13" width="3.5" height="6" rx="1.5"/><rect x="17" y="13" width="3.5" height="6" rx="1.5"/></svg>
+        </button>
+      </div>
+      <div class="rail-sep"></div>
+      <button class="rail-btn logout" title="Log out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 8l4 4-4 4M14 12H4"/></svg>
+      </button>
+    </nav>
+
+    <!-- main -->
+    <main class="main">
+      <header class="head">
+        <h1>Dashboard</h1>
+        <div class="actions">
+          <div class="theme-toggle">
+            <button title="Dark"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+            <button class="on" title="Light"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M4 12H1.5M22.5 12H20M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19"/></svg></button>
+          </div>
+          <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M9.5 19a2.5 2.5 0 0 0 5 0"/></svg><span class="badge">10</span></button>
+          <button class="avatar-btn"><span class="av" style="background:linear-gradient(140deg,#c85a8e,#7a4bd0);width:100%;height:100%;font-size:14px">SM</span><i class="dot"></i></button>
+        </div>
+      </header>
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <section class="screen active" data-screen="dashboard" data-screen-label="Dashboard">
+        <div class="dash">
+
+          <!-- main column -->
+          <div class="col-main">
+
+            <!-- top row -->
+            <div class="top-row">
+
+              <!-- focus timer -->
+              <div class="card timer-card">
+                <h3>Onboarding Flow</h3>
+                <div class="t-sub">Atlas · Mobile App</div>
+                <div class="dial">
+                  <svg class="ring" viewBox="0 0 150 150">
+                    <circle cx="75" cy="75" r="70" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
+                    <circle id="dialRing" cx="75" cy="75" r="70" fill="none" stroke="#f0552d" stroke-width="5" stroke-linecap="round"/>
+                  </svg>
+                  <button class="btn" id="dialBtn" title="Pause / resume"></button>
+                </div>
+                <div class="timer-stats">
+                  <div class="stat"><div class="k">Today</div><div class="v" id="timerToday">00:57:56</div></div>
+                  <div class="stat"><div class="k">Limit</div><div class="v">06:00:00</div></div>
+                </div>
+              </div>
+
+              <!-- today's tasks -->
+              <div class="card">
+                <div class="card-h">
+                  <div class="lhs"><h3>Today's tasks</h3><span class="count-pill">3</span></div>
+                  <a class="link">Manage <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></a>
+                </div>
+                <div class="tasklist">
+                  <div class="task active">
+                    <span class="play"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.5" height="14" rx="1.3"/><rect x="13.5" y="5" width="3.5" height="14" rx="1.3"/></svg></span>
+                    <div class="meta"><div class="ti">Onboarding Flow Redesign</div><div class="pr">Atlas · Mobile App</div></div>
+                    <button class="star on"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/></svg></button>
+                  </div>
+                  <div class="task">
+                    <span class="play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.2v13.6c0 .9 1 1.45 1.76.97l10.5-6.8a1.16 1.16 0 0 0 0-1.94L9.76 4.23A1.16 1.16 0 0 0 8 5.2z"/></svg></span>
+                    <div class="meta"><div class="ti">Landing page hero section</div><div class="pr">Helios CRM</div></div>
+                    <button class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z" stroke-linejoin="round"/></svg></button>
+                  </div>
+                  <div class="task">
+                    <span class="play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.2v13.6c0 .9 1 1.45 1.76.97l10.5-6.8a1.16 1.16 0 0 0 0-1.94L9.76 4.23A1.16 1.16 0 0 0 8 5.2z"/></svg></span>
+                    <div class="meta"><div class="ti">Competitive teardown</div><div class="pr">Northwind Web</div></div>
+                    <button class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z" stroke-linejoin="round"/></svg></button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- today's meetings -->
+              <div class="card">
+                <div class="card-h">
+                  <div class="lhs"><h3>Today's meetings</h3><span class="count-pill">6</span></div>
+                  <a class="link">View all <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></a>
+                </div>
+                <div class="meet-grid">
+                  <div class="meet am">
+                    <div class="m-top"><span class="ap">AM</span><span class="m-ico" style="background:rgba(240,85,45,.25);color:#ff8a6a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H9l-4 3.5V16H4z" stroke-linejoin="round"/></svg></span></div>
+                    <div class="time">10:00</div>
+                    <div class="desc">Present the sprint board and gather feedback</div>
+                  </div>
+                  <div class="meet">
+                    <div class="m-top"><span class="ap">PM</span><span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="12" height="12" rx="2.5"/><path d="M15 10l5-2.5v9L15 14z" stroke-linejoin="round"/></svg></span></div>
+                    <div class="time">01:00</div>
+                    <div class="desc">Design sync with the product team</div>
+                  </div>
+                  <div class="meet">
+                    <div class="m-top"><span class="ap">PM</span><span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/></svg></span></div>
+                    <div class="time">03:00</div>
+                    <div class="desc">New-hire onboarding kickoff</div>
+                  </div>
+                  <button class="meet add">
+                    <span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></span>
+                    <span>Schedule meeting</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===== full-width area chart ===== -->
+            <div class="card chart-card">
+              <div class="chart-head">
+                <div class="chart-title">
+                  <span class="tk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 16l5-6 4 3 5-8 4 5" stroke-linejoin="round" stroke-linecap="round"/></svg></span>
+                  <div>
+                    <h3>Focus over time</h3>
+                    <div class="sub">Productivity score · live session</div>
+                  </div>
+                </div>
+                <div class="chart-now">
+                  <div class="big" id="focusNow">78.4%&nbsp;<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 17l7-7 7 7" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+                  <div class="lo-hi">H: <b id="focusHi">—</b> &nbsp; L: <b id="focusLo">—</b></div>
+                </div>
+              </div>
+              <div class="chip-row" style="justify-content:space-between;margin:6px 0 2px">
+                <div class="chart-tools">
+                  <button class="chip" data-range="day">Day</button>
+                  <button class="chip on" data-range="week">Week</button>
+                  <button class="chip" data-range="month">Month</button>
+                  <button class="chip" data-range="year">Year</button>
+                </div>
+                <div class="chart-tools">
+                  <button class="chip">Studies</button>
+                  <button class="chip">Views</button>
+                </div>
+              </div>
+              <div class="chart-wrap">
+                <svg id="focusChart"></svg>
+                <div class="chart-tip" id="focusTip"></div>
+              </div>
+            </div>
+
+            <!-- ===== projects timeline ===== -->
+            <div class="proj-head">
+              <div class="lhs">
+                <h2>Projects</h2>
+                <button class="filter-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h18M6 12h12M10 19h4"/></svg> Filter</button>
+              </div>
+              <div class="seg">
+                <button>Today</button>
+                <button class="on">Week</button>
+                <button>Month</button>
+                <button>Year</button>
+              </div>
+            </div>
+
+            <div class="timeline">
+              <div class="tl-head">
+                <div class="corner"></div>
+                <div class="d"><div class="dn">MON <b>18</b></div></div>
+                <div class="d"><div class="dn">TUE <b>19</b></div></div>
+                <div class="d today"><div class="dn">WED <b>20</b></div></div>
+                <div class="d"><div class="dn">THU <b>21</b></div></div>
+                <div class="d"><div class="dn">FRI <b>22</b></div></div>
+              </div>
+              <div class="tl-body" id="tlBody">
+                <!-- now line -->
+                <div class="now-line" id="nowLine"><div class="ln"></div><span class="tag">10:28</span><span class="knob"></span></div>
+
+                <!-- axis -->
+                <div class="tl-axis">
+                  <div class="h">09:00</div><div class="h">10:00</div><div class="h">11:00</div><div class="h">12:00</div><div class="h">01:00</div>
+                </div>
+
+                <!-- MON -->
+                <div class="tl-col">
+                  <div class="tcard done">
+                    <span class="pri-tag done"><i></i>Done</span>
+                    <h4>Design Brief Review</h4>
+                    <p>Review project goals and objectives</p>
+                    <div class="foot">
+                      <div class="avstack">
+                        <span class="av" style="background:#c4564a">AK</span>
+                        <span class="av" style="background:#3f7fd1">TM</span>
+                        <span class="av" style="background:#3aa06b">JD</span>
+                        <span class="more">+8</span>
+                      </div>
+                    </div>
+                    <div class="tmeta" style="margin-top:10px">
+                      <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg> 01h 53m</span>
+                      <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H9l-4 3.5V16H4z" stroke-linejoin="round"/></svg> 118</span>
+                    </div>
+                  </div>
+                  <div class="tcard done">
+                    <span class="pri-tag done"><i></i>Done</span>
+                    <h4>Moodboard Creation</h4>
+                    <p>Define the visual direction</p>
+                  </div>
+                  <div class="tcard break"><span class="lab">Break time</span></div>
+                </div>
+
+                <!-- TUE -->
+                <div class="tl-col">
+                  <div class="tcard done">
+                    <span class="pri-tag done"><i></i>Done</span>
+                    <h4>Typography &amp; Layout</h4>
+                    <p>Choose fonts and layout elements for the design system</p>
+                    <div class="foot" style="margin-top:14px">
+                      <div class="avstack">
+                        <span class="av" style="background:#b5573f">RS</span>
+                        <span class="av" style="background:#7a5bd0">ML</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- WED today -->
+                <div class="tl-col today">
+                  <div class="tcard med">
+                    <span class="pri-tag medium"><i></i>Medium</span>
+                    <h4>Color Palette Selection</h4>
+                    <p>Create a harmonious color scheme</p>
+                  </div>
+                  <div class="tcard">
+                    <div class="foot" style="margin-top:0">
+                      <div class="avstack">
+                        <span class="av" style="background:#3f7fd1">TM</span>
+                        <span class="av" style="background:#c4564a">AK</span>
+                      </div>
+                    </div>
+                    <div class="tmeta" style="margin-top:12px">
+                      <span class="pill">01 : 24</span>
+                      <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H9l-4 3.5V16H4z" stroke-linejoin="round"/></svg> 3</span>
+                    </div>
+                  </div>
+                  <div class="tcard break"><span class="lab">Break time</span></div>
+                  <div class="tcard high">
+                    <span class="pri-tag high"><i></i>High</span>
+                    <h4>User Experience (UX)</h4>
+                    <p>Map the core task flows end to end</p>
+                  </div>
+                </div>
+
+                <!-- THU -->
+                <div class="tl-col">
+                  <div class="tcard high">
+                    <span class="pri-tag high"><i></i>High</span>
+                    <h4>User Interface (UI) Design</h4>
+                    <p>Create an appealing and visually engaging interface</p>
+                    <div class="foot" style="margin-top:14px">
+                      <div class="avstack">
+                        <span class="av" style="background:#3aa06b">JD</span>
+                        <span class="av" style="background:#3f7fd1">TM</span>
+                        <span class="more">+2</span>
+                      </div>
+                      <div class="tmeta"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H9l-4 3.5V16H4z" stroke-linejoin="round"/></svg> 34</span></div>
+                    </div>
+                  </div>
+                  <div class="tcard low">
+                    <span class="pri-tag low"><i></i>Low</span>
+                    <h4>Prototype Creation</h4>
+                    <p>Review a prototype to showcase the design</p>
+                  </div>
+                </div>
+
+                <!-- FRI -->
+                <div class="tl-col">
+                  <div class="tcard low">
+                    <span class="pri-tag low"><i></i>Low</span>
+                    <h4>Conduct User Testing</h4>
+                    <p>Run 5 moderated sessions</p>
+                  </div>
+                  <div class="tcard high">
+                    <span class="pri-tag high"><i></i>High</span>
+                    <h4>Client Presentation</h4>
+                    <p>Present the project and gather feedback from the client</p>
+                    <div class="foot" style="margin-top:14px">
+                      <div class="avstack">
+                        <span class="av" style="background:#c4564a">AK</span>
+                        <span class="av" style="background:#7a5bd0">ML</span>
+                        <span class="av" style="background:#3aa06b">JD</span>
+                        <span class="more">+8</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- right column -->
+          <aside class="col-side">
+
+            <!-- activity -->
+            <div class="card activity">
+              <div class="card-h">
+                <div class="lhs"><h3>Activity</h3><span class="delta up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 17l7-7 7 7" stroke-linejoin="round"/></svg>+12%</span></div>
+                <button class="dots"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+              </div>
+              <div class="big-pct">70<span style="font-size:24px;color:var(--text-dim)">%</span></div>
+              <div class="bars">
+                <div class="bar-col hot"><div class="bar-track"><div class="fill" style="height:92%"></div></div><div class="day">Mon</div><div class="pc">92%</div></div>
+                <div class="bar-col"><div class="bar-track"><div class="fill" style="height:41%"></div></div><div class="day">Tue</div><div class="pc lo">41%</div></div>
+                <div class="bar-col"><div class="bar-track"><div class="fill" style="height:78%"></div></div><div class="day">Wed</div><div class="pc">78%</div></div>
+                <div class="bar-col"><div class="bar-track"><div class="fill" style="height:64%"></div></div><div class="day">Thu</div><div class="pc">64%</div></div>
+                <div class="bar-col"><div class="bar-track"><div class="fill" style="height:38%"></div></div><div class="day">Fri</div><div class="pc lo">38%</div></div>
+              </div>
+            </div>
+
+            <!-- projects worked -->
+            <div class="card">
+              <div class="card-h">
+                <div class="lhs"><h3>Projects worked</h3><span class="delta down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 7l7 7 7-7" stroke-linejoin="round"/></svg>-5%</span></div>
+                <button class="dots"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+              </div>
+              <div class="donut-row">
+                <div class="donut">
+                  <svg viewBox="0 0 124 124">
+                    <circle cx="62" cy="62" r="54" fill="none" stroke="#1d1d23" stroke-width="11"/>
+                    <circle cx="62" cy="62" r="54" fill="none" stroke="#2fe08a" stroke-width="11" stroke-linecap="round" stroke-dasharray="138.5 200.8" stroke-dashoffset="0"/>
+                    <circle cx="62" cy="62" r="54" fill="none" stroke="#4b9bff" stroke-width="11" stroke-linecap="round" stroke-dasharray="84.2 255.1" stroke-dashoffset="-142.5"/>
+                    <circle cx="62" cy="62" r="54" fill="none" stroke="#f0552d" stroke-width="11" stroke-linecap="round" stroke-dasharray="57.1 282.2" stroke-dashoffset="-230.7"/>
+                    <circle cx="62" cy="62" r="54" fill="none" stroke="#f4c54a" stroke-width="11" stroke-linecap="round" stroke-dasharray="43.5 295.8" stroke-dashoffset="-291.8"/>
+                  </svg>
+                  <div class="ctr"><div><div class="n">4</div><div class="l">projects</div></div></div>
+                </div>
+                <div class="legend">
+                  <div class="row"><span class="sw" style="background:#2fe08a"></span><span class="nm">Atlas</span><span class="vl">42%</span></div>
+                  <div class="row"><span class="sw" style="background:#4b9bff"></span><span class="nm">Helios CRM</span><span class="vl">26%</span></div>
+                  <div class="row"><span class="sw" style="background:#f0552d"></span><span class="nm">Northwind</span><span class="vl">18%</span></div>
+                  <div class="row"><span class="sw" style="background:#f4c54a"></span><span class="nm">Loop Mobile</span><span class="vl">14%</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- reminders -->
+            <div class="card reminders-card">
+              <div class="card-h">
+                <div class="lhs"><h3>Reminders</h3></div>
+                <a class="link">Manage <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></a>
+              </div>
+              <div class="reminders">
+                <div class="rem">
+                  <div class="top"><div class="tm">09:30 <small>AM</small></div><span class="pri low"><i></i>Low</span></div>
+                  <div class="txt">Review usability test notes</div>
+                </div>
+                <div class="rem">
+                  <div class="top"><div class="tm">10:00 <small>AM</small></div><span class="pri high"><i></i>High</span></div>
+                  <div class="txt">Client presentation — Atlas</div>
+                </div>
+                <div class="rem">
+                  <div class="top"><div class="tm">04:15 <small>PM</small></div><span class="pri high"><i></i>High</span></div>
+                  <div class="txt">Add subtask to Helios analysis</div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ===================== ANALYTICS ===================== -->
+      <section class="screen" data-screen="analytics" data-screen-label="Analytics">
+        <div class="analytics-grid">
+          <div class="kpi"><div class="k">Avg. focus score</div><div class="v">78.4%</div><span class="delta up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 17l7-7 7 7"/></svg>+12%</span></div>
+          <div class="kpi"><div class="k">Deep-work hours</div><div class="v">34.2h</div><span class="delta up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 17l7-7 7 7"/></svg>+6%</span></div>
+        </div>
+        <div class="card chart-card" style="margin-top:18px">
+          <div class="chart-head">
+            <div class="chart-title">
+              <span class="tk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 16l5-6 4 3 5-8 4 5" stroke-linejoin="round" stroke-linecap="round"/></svg></span>
+              <div><h3>Focus over time</h3><div class="sub">All projects · this quarter</div></div>
+            </div>
+          </div>
+          <div class="chart-wrap"><svg id="miniChart"></svg></div>
+        </div>
+      </section>
+
+      <!-- ===================== PROJECTS ===================== -->
+      <section class="screen" data-screen="projects" data-screen-label="Projects">
+        <div class="placeholder-panel">
+          <div class="ph-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.7 7.7 11 15.3M16.3 7.7 13 15.3M8 6h8"/></svg></div>
+          <h2>Projects board</h2>
+          <p>A kanban / list view of every project would live here. Tell me how you'd like to slice it (by status, owner, or sprint) and I'll build it out.</p>
+          <div class="mono-note">placeholder · reachable from the nav rail</div>
+        </div>
+      </section>
+
+      <!-- ===================== DOCUMENTS ===================== -->
+      <section class="screen" data-screen="documents" data-screen-label="Documents">
+        <div class="placeholder-panel">
+          <div class="ph-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z" stroke-linejoin="round"/><path d="M13 3v5h5"/></svg></div>
+          <h2>Documents</h2>
+          <p>Briefs, specs, and shared files. Let me know what document types matter and I'll design the library.</p>
+          <div class="mono-note">placeholder · reachable from the nav rail</div>
+        </div>
+      </section>
+
+      <!-- ===================== CALENDAR ===================== -->
+      <section class="screen" data-screen="calendar" data-screen-label="Calendar">
+        <div class="placeholder-panel">
+          <div class="ph-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg></div>
+          <h2>Calendar</h2>
+          <p>A month / week calendar of meetings and deadlines. The weekly strip on the dashboard is a preview of this.</p>
+          <div class="mono-note">placeholder · reachable from the nav rail</div>
+        </div>
+      </section>
+
+      <!-- ===================== MESSAGES ===================== -->
+      <section class="screen" data-screen="messages" data-screen-label="Messages">
+        <div class="placeholder-panel">
+          <div class="ph-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H9l-4 3.5V16H4z" stroke-linejoin="round"/></svg></div>
+          <h2>Messages</h2>
+          <p>Team chat and notifications (2 unread). I can design the thread list + conversation view next.</p>
+          <div class="mono-note">placeholder · reachable from the nav rail</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
