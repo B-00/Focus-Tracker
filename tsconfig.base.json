@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "useUnknownInCatchVariables": true,
+    "exactOptionalPropertyTypes": false,
+
+    "verbatimModuleSyntax": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+    // Note: NOT setting `incremental: true` at the base. nest-cli.json's
+    // `deleteOutDir: true` wipes `dist/` between builds but leaves the
+    // `.tsbuildinfo` file alone, which makes tsc think nothing needs
+    // rebuilding and emit nothing. Per-workspace can opt in if they don't
+    // hit that interaction.
+  },
+  "exclude": ["node_modules", "dist", "build"]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@focus-tracker/shared",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Shared TypeScript types and Zod schemas: telemetry events, DTOs, enums mirrored from the Prisma schema.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["src", "dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"(shared) lint TODO\" && exit 0",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules
+dist
+build
+.pnpm-store
+**/*.tsbuildinfo
+apps/api/src/generated
+**/prisma/migrations
+pnpm-lock.yaml

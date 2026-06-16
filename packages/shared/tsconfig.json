@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true,
+    // ESM output (Node ESM, with .js extensions in relative imports). The
+    // web client (Vite/Rollup) prefers ESM for tree-shaking, and Node 22's
+    // `require(esm)` lets the CJS NestJS API consume this package
+    // transparently — no dual-package hassle.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*"]
+}

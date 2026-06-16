@@ -1,0 +1,41 @@
+{
+  "name": "focus-tracker",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Personal focus-tracking app: web dashboard + API + telemetry source clients (extension + desktop). See PROJECT.md.",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.28.1",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml,css}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml,css}\" --ignore-path .gitignore",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "db:migrate": "pnpm --filter @focus-tracker/api exec prisma migrate dev",
+    "db:generate": "pnpm --filter @focus-tracker/api exec prisma generate",
+    "db:studio": "pnpm --filter @focus-tracker/api exec prisma studio",
+    "db:reset": "pnpm --filter @focus-tracker/api exec prisma migrate reset"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "argon2",
+      "esbuild",
+      "prisma"
+    ]
+  }
+}
