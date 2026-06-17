@@ -132,14 +132,13 @@ State stays in sync with the inline mode via TanStack Query — a PATCH from eit
 The single management surface for device pairing and revocation (per `PROJECT.md` §12.3).
 
 Top of the section:
-- A `Pair new device` button — clicking it calls `POST /v1/devices/pairing-codes` (see `PROJECT.md` §12.6). The response payload includes a 6-digit `code`, an `expiresAt` (5 min from now per `PROJECT.md` §12.7), and the API base URL the device should connect to.
-- A modal opens showing:
-  - The 6-digit code in a large monospace display, easy to read.
-  - A countdown to expiry.
-  - Step-by-step instructions: *"1. Open the Focus Tracker extension or desktop app. 2. Click 'Pair'. 3. Enter this code: {code}. 4. The device will appear in this list within a few seconds."*
-  - A `Copy code` button.
-  - The web app polls the pairing-code status every 2s while the modal is open; when the code is claimed (the device has called `/v1/devices/pairing-codes/{code}/claim`), the modal closes itself and the new device appears in the list below with a brief highlight.
-  - If the user closes the modal early, the code expires naturally; no cleanup needed.
+- A `Pair new device` button — opens a modal containing a single 6-digit code input field. The user obtains the code from their extension or desktop app (which is what calls `POST /v1/devices/pairing-codes`; see `Auth.md` §5.1), types it into the modal, and clicks Pair. The web app calls `POST /v1/devices/pairing-codes/{code}/claim` with the user's JWT (the JWT is what binds the device to *this* user). On success the modal closes and the new device appears in the list below with a brief highlight.
+- The modal shows:
+  - A short paragraph: *"Open the Focus Tracker extension or desktop app and click 'Pair this device' to get a 6-digit code."*
+  - The 6-digit code input — `inputMode="numeric"`, `maxLength=6`, digits-only mask.
+  - The set of possible errors from the claim call, surfaced inline above the Pair button: `pairing_code_invalid` → "That code wasn't recognized. It may have expired (codes are valid for 5 minutes). Get a fresh code from your device and try again." `pairing_code_already_claimed` → "That code has already been used to pair another device."
+  - A `Cancel` button (also Escape to close).
+  - The device, once paired, won't show activity in the list until it polls its API key and starts ingesting. This is normal — `lastSeen` will read "Never" until the first authenticated request.
 - A short inline reminder of the API base URL (with a `[Copy]` button) — same content as the §4.5 Telemetry section's display, surfaced here because users almost always need it during pairing setup.
 
 Below: the list of paired devices. Each row shows:
