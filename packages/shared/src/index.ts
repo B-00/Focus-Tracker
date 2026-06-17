@@ -84,3 +84,24 @@ export type {
   ChangePasswordRequest,
   AuthErrorCode,
 } from './auth.js';
+
+// ---------------------------------------------------------------------------
+//  Pairing + Devices (Auth.md §5)
+// ---------------------------------------------------------------------------
+export {
+  deviceProposalSchema,
+  pairingCodeCreateRequestSchema,
+  pairingCodeCreateResponseSchema,
+  pairingCodeClaimResponseSchema,
+  deviceListItemSchema,
+  PAIRING_ERROR_CODES,
+} from './pairing.js';
+export type {
+  DeviceProposal,
+  PairingCodeCreateRequest,
+  PairingCodeCreateResponse,
+  PairingCodePollResponse,
+  PairingCodeClaimResponse,
+  DeviceListItem,
+  PairingErrorCode,
+} from './pairing.js';
