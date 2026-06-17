@@ -64,9 +64,35 @@ Mirrors the main project (see `PROJECT.md` §1.1):
 
 | OS       | Status (v1)         | Foreground API                                              | Notes                                                |
 | -------- | ------------------- | ----------------------------------------------------------- | ---------------------------------------------------- |
-| Windows  | Primary             | `GetForegroundWindow` + `GetWindowText` + `GetWindowThreadProcessId` | No special permissions needed                        |
+| Windows  | Primary             | `GetForegroundWindow` + `GetWindowText` + `GetWindowThreadProcessId` | Win 10 1809+ and Win 11 — see §4.1                   |
 | macOS    | Primary             | `NSWorkspace.shared.frontmostApplication`                  | Window titles require **Accessibility** permission   |
 | Linux    | Best-effort (X11)   | X11 `_NET_ACTIVE_WINDOW`                                    | Wayland deferred (no portable API as of 2026)        |
+
+### 4.1 Windows version matrix
+
+**Minimum:** Windows 10 build **1809** (October 2018) — Tauri 2's own floor, also the version where modern Win32 + WebView2 stabilised.
+
+| Version              | Status            | Notes                                                       |
+| -------------------- | ----------------- | ----------------------------------------------------------- |
+| Windows 11 (any)     | Primary, tested   | Daily dev target. WebView2 pre-installed by the OS.         |
+| Windows 10 22H2      | Tested            | Spot-checked on a VM before merging to `main`.              |
+| Windows 10 1809+     | Supported         | All Win32 APIs we use are stable since 1809; not actively tested. |
+| Windows 10 < 1809    | **Unsupported**   | Tauri 2 itself refuses to install.                          |
+| Windows 7 / 8 / 8.1  | **Unsupported**   | EOL, no WebView2.                                           |
+
+All foreground/idle/power APIs we use (§7.1, §7.2) are identical between Win 10 and Win 11. There are **no `cfg!(...)` branches between Win 10 and Win 11** anywhere in the Rust code — if there are, treat that as a bug.
+
+### 4.2 WebView2 runtime distribution
+
+The Tauri UI shell needs Microsoft's WebView2 runtime. Strategy: **`embedBootstrapper`** — the runtime installer is bundled inside our `.msi`.
+
+| Property               | Value / Rationale                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| `bundle.windows.webviewInstallMode.type` | `"embedBootstrapper"` (set in `tauri.conf.json`)                       |
+| Installer size impact  | ~160 MB MSI (vs ~5 MB with `downloadBootstrapper`)                                      |
+| Offline install        | Yes — works on a freshly-imaged Win 10 box with no internet                             |
+| First-run experience   | No "downloading runtime…" delay                                                         |
+| Trade-off accepted     | Larger download. Acceptable at personal-use scale (one user, infrequent installs).      |
 
 ---
 
@@ -78,8 +104,9 @@ Mirrors the main project (see `PROJECT.md` §1.1):
 - Onboarding must clearly explain *why* each prompt appears and what happens if denied (app still works, but only at the app-name granularity, no window titles).
 
 ### Windows
-- No special permissions for foreground window detection.
+- No special permissions for foreground window detection (works identically on Win 10 1809+ and Win 11).
 - Auto-launch uses HKCU `\Run` registry key — no admin required.
+- WebView2 runtime requirement is handled by the bundled bootstrapper (§4.2) — no separate prompt or download.
 - **Code signing strongly recommended** to avoid SmartScreen warnings on download/install.
 
 ### Linux
