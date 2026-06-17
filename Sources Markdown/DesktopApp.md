@@ -31,7 +31,7 @@ Mirrors the main project (see `PROJECT.md` §1.1):
 - Cross-platform: Windows, macOS, Linux from one codebase.
 - Tiny footprint — low CPU when idle, ~10 MB binary, single-digit MB of RAM.
 - Survive sleep/wake, network outages, crashes.
-- Respect privacy: per-app blocklist, per-window-title regex blocklist, "track titles" toggle.
+- Respect privacy: "track window titles" toggle, never-captured list of sensitive event categories (see §11).
 - Background-first UX: system tray + small settings window only.
 
 ### Non-Goals (v1)
@@ -107,10 +107,10 @@ Mirrors the main project (see `PROJECT.md` §1.1):
 │ System Tray          │                │ Settings Window (React)     │
 │  - current app       │                │  - pairing flow             │
 │  - queue depth       │                │  - permissions checker      │
-│  - pause toggle      │                │  - blocklists (apps, regex) │
-│  - open dashboard    │                │  - track-titles toggle      │
-│  - settings…         │                │  - auto-launch toggle       │
-│  - quit              │                │  - last sync, version, logs │
+│  - pause toggle      │                │  - track-titles toggle      │
+│  - open dashboard    │                │  - auto-launch toggle       │
+│  - settings…         │                │  - last sync, version, logs │
+│  - quit              │                │                             │
 └──────────────────────┘                └─────────────────────────────┘
 ```
 
@@ -206,7 +206,7 @@ Identical contract to the extension (see `Extension.md` §9).
 - Token: long-lived `ft_live_...`, scoped `telemetry:write`, stored in the OS keychain.
 - Request headers:
   ```
-  POST /v1/telemetry/events HTTP/1.1
+  POST /v1/telemetry/batch HTTP/1.1
   Authorization: Bearer ft_live_a1b2c3...
   Content-Type:  application/json
   X-Client:      focus-tracker-desktop/1.0.0
@@ -220,8 +220,6 @@ Identical contract to the extension (see `Extension.md` §9).
 | Control                              | Default     | Notes                                                       |
 | ------------------------------------ | ----------- | ----------------------------------------------------------- |
 | Track window titles                  | **On**      | Off → only `appName` / `appBundleId` is sent                |
-| Per-app blocklist                    | Empty       | Events for blocklisted apps dropped pre-storage             |
-| Window-title regex blocklist         | Empty       | E.g. `/Banking/i`, `/1Password/`                            |
 | Pause toggle (tray)                  | Off         | While paused: capture and flush both halt; queue preserved  |
 | Idle/sleep handling                  | Internal-only — used to bound `focus_change.endedAt`; not a wire event in v1 (see §7.1) |
 

@@ -257,7 +257,7 @@ No `expiresAt` — API keys are long-lived. The user's only recovery from leak i
 ### 5.3 Request format
 
 ```
-POST /v1/telemetry/events HTTP/1.1
+POST /v1/telemetry/batch HTTP/1.1
 Authorization: Bearer ft_live_a1b2c3d4e5...
 Content-Type:  application/json
 X-Client:      focus-tracker-extension/1.0.0
@@ -269,7 +269,7 @@ X-Client:      focus-tracker-extension/1.0.0
 ### 5.4 Scope enforcement
 
 API keys are scoped `telemetry:write`. The `ApiKeyAuthGuard` accepts ONLY:
-- `POST /v1/telemetry/events`
+- `POST /v1/telemetry/batch`
 - `POST /v1/telemetry/diagnostics` (future; client-side error reports — see `PROJECT.md` §12.8)
 
 Any other route returns `403 insufficient_scope` if hit with an API key. Conversely, the `JwtAuthGuard` rejects any `ft_live_…` token with `401 token_wrong_type`.
@@ -521,7 +521,7 @@ Cross-reference: `Device` itself is defined in `PROJECT.md` §5 / `Settings.md` 
 
 | Method | Path                          | Guard      | Purpose                                                       |
 | ------ | ----------------------------- | ---------- | ------------------------------------------------------------- |
-| POST   | `/v1/telemetry/events`        | API key    | Batch ingest of raw focus events                              |
+| POST   | `/v1/telemetry/batch`         | API key    | Batch ingest of raw focus events                              |
 
 (Full shape, validation, and error envelopes per `PROJECT.md` §7 / §12.)
 

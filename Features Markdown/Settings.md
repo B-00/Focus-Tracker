@@ -268,7 +268,7 @@ Settings reads/writes those existing entities; no new server-side tables are int
 | GET    | `/v1/me/dashboard-prefs`                          | (already exists per `Dashboard.md` §10) — drives §4.3                                                                      |
 | PATCH  | `/v1/me/dashboard-prefs`                          | (already exists)                                                                                                          |
 
-No `/v1/diagnostics` endpoint — `lastSeen` / `lastSuccessfulIngestAt` ride along with `GET /v1/devices`. No display-blocklist endpoints — capture controls live inside the source clients themselves (see `Sources Markdown/Extension.md` and `Sources Markdown/DesktopApp.md`).
+No `/v1/diagnostics` endpoint — `lastSeen` / `lastSuccessfulIngestAt` ride along with `GET /v1/devices`. Privacy controls live entirely inside the source clients (see `Sources Markdown/Extension.md` and `Sources Markdown/DesktopApp.md`).
 
 ---
 

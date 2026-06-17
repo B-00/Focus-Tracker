@@ -170,9 +170,7 @@ A small inline hint on `/activity`: *"Want to hide something? Adjust the capture
 | GET    | `/v1/activity/recent?limit=...`                     | Most recent raw telemetry events (capped, reverse chrono).                                              |
 | GET    | `/v1/activity/by-day?from=...&to=...`               | Daily totals per source over a range — used by `MementoMori.md` §4.2.                                  |
 
-The ingest endpoint (`POST /v1/telemetry/batch`) that *populates* these is owned by `PROJECT.md` §12, not by this feature.
-
-No display-blocklist endpoints in v1 — capture controls live inside the source clients (see §5.4).
+The ingest endpoint (`POST /v1/telemetry/batch`) that *populates* these is owned by `PROJECT.md` §12, not by this feature. Privacy / capture controls live entirely inside the source clients (see §5.4).
 
 ---
 

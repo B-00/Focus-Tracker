@@ -568,7 +568,7 @@ These endpoints will be the contract between the two source clients and this API
 
 | Method | Path                                          | Purpose                                          |
 | ------ | --------------------------------------------- | ------------------------------------------------ |
-| POST   | `/v1/telemetry/events`                        | Batch ingest of raw focus events                 |
+| POST   | `/v1/telemetry/batch`                         | Batch ingest of raw focus events                 |
 | POST   | `/v1/devices/pairing-codes`                   | Device requests a 6-digit pairing code           |
 | GET    | `/v1/devices/pairing-codes/{code}`            | Device polls for completed pairing → API key     |
 | POST   | `/v1/devices/pairing-codes/{code}/claim`      | Web app confirms a pairing code for current user |

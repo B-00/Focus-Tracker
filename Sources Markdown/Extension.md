@@ -30,7 +30,7 @@ Mirrors the main project (see `PROJECT.md` §1.1):
 ### Goals
 - Measure website usage with second-level accuracy.
 - Survive offline periods, browser restarts, service-worker death, and unexpected crashes.
-- Respect privacy: domain-only by default, blocklists, incognito always off.
+- Respect privacy: domain-only by default, incognito always off.
 - Cross-browser: Chrome, Firefox, Edge from one codebase.
 - Minimal footprint — no content scripts, no DOM injection, no telemetry from page content.
 
@@ -96,8 +96,8 @@ The install screen should explain plainly **why** each permission is requested �
 │ Popup (React)        │                │ Options Page (React) │
 │  - current site      │                │  - pairing flow      │
 │  - queue depth       │                │  - privacy controls  │
-│  - pause toggle      │                │  - blocklists        │
-│  - last sync time    │                │  - permissions help  │
+│  - pause toggle      │                │  - permissions help  │
+│  - last sync time    │                │                      │
 └──────────────────────┘                └──────────────────────┘
 ```
 
@@ -155,7 +155,7 @@ The install screen should explain plainly **why** each permission is requested �
 - **Backpressure cap:** 30 days **OR** 100,000 events
   - When exceeded: drop oldest events silently (no synthetic gap-marker event in v1 — see `PROJECT.md` §12.2 / §12.4)
 - **Settings store:** `chrome.storage.local` (separate from the outbox)
-  - Pairing state, device API key, user preferences, blocklists
+  - Pairing state, device API key, user preferences
 
 **Known limitation (documented, not fixed in v1):** `chrome.storage.local` is unencrypted on disk. The device API key sitting there is industry-standard for extensions but worth disclosing in the privacy notes.
 
@@ -172,7 +172,7 @@ The install screen should explain plainly **why** each permission is requested �
 ### Per-flush logic
 1. Acquire the flush mutex (single-flight; alarms can race).
 2. Read up to 50 events from the outbox ordered by `startedAt`.
-3. Wrap in a batch envelope (see §9.2) and POST `/v1/telemetry/events`.
+3. Wrap in a batch envelope (see §9.2) and POST `/v1/telemetry/batch`.
 4. Handle response:
    | Status                     | Action                                                                |
    | -------------------------- | --------------------------------------------------------------------- |
@@ -228,7 +228,7 @@ Move to a small `dead_letter` store with the server's reason. **Never** retry fo
 Every request from the extension:
 
 ```
-POST /v1/telemetry/events HTTP/1.1
+POST /v1/telemetry/batch HTTP/1.1
 Authorization: Bearer ft_live_a1b2c3...
 Content-Type:  application/json
 X-Client:      focus-tracker-extension/1.0.0
@@ -258,8 +258,6 @@ Body (batch envelope):
 | Control                       | Default     | Notes                                                            |
 | ----------------------------- | ----------- | ---------------------------------------------------------------- |
 | Domain-only URL capture       | **On**      | `url` field is `null` unless the user opts in to full-URL mode   |
-| Per-domain blocklist          | Empty       | Events for blocked domains dropped pre-storage                   |
-| Regex blocklist (URL/title)   | Empty       | Power-user option                                                |
 | Incognito / private windows   | **Never**   | Hard rule; not user-toggleable                                   |
 | Pause toggle                  | Off         | While paused: no capture, no flush, queue preserved              |
 
