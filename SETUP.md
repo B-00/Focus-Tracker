@@ -16,6 +16,7 @@ Install these on your machine first:
 | **pnpm**            | `>= 10` | `npm install -g pnpm` (or `corepack enable && corepack prepare pnpm@latest --activate`). |
 | **Docker Desktop**  | latest  | Runs the local Postgres container. [Get it here](https://www.docker.com/products/docker-desktop/). Must be **running** before any `pnpm db:*` command. |
 | **Git**             | any     | For cloning.                                                          |
+| **Rust** (desktop only) | stable | Only needed if you'll work on `apps/desktop/`. Install via [rustup](https://www.rust-lang.org/tools/install) — on Windows: `winget install Rustlang.Rustup`, then `rustup default stable`. |
 
 Verify with:
 
@@ -23,6 +24,7 @@ Verify with:
 node --version    # v22.x
 pnpm --version    # 10.x
 docker --version  # any recent version
+rustc --version   # only if you're building the desktop app
 ```
 
 ---
@@ -75,6 +77,18 @@ To run them individually:
 pnpm --filter @focus-tracker/api dev
 pnpm --filter @focus-tracker/web dev
 ```
+
+### Desktop app (Tauri 2)
+
+Optional — only if you're working on `apps/desktop/`. Needs the Rust toolchain (§1).
+
+```bash
+pnpm --filter @focus-tracker/desktop dev
+```
+
+The first run downloads Rust dependencies and may take 5–10 minutes. After that, `tauri dev` is a normal watch loop: Vite serves the React UI on `localhost:1420`, and Rust source changes trigger a rebuild + window reload.
+
+You can also leave `pnpm dev` (API + web) running in one terminal and `pnpm --filter @focus-tracker/desktop dev` in another — the desktop app talks to the API just like the browser extension does.
 
 ---
 
@@ -183,6 +197,14 @@ Something else is squatting the port (often a leftover `node` from a previous se
 
 Click "pin to Prisma 6" on the popup. We're intentionally on the 6.x line — see the project decision recorded next to `prisma` in [`apps/api/package.json`](apps/api/package.json).
 
+### `pnpm install` fails on `EPERM ... query_engine-windows.dll`
+
+Prisma's `postinstall` hook can't replace its query engine while the API dev server has it loaded. Stop the API (Ctrl-C the `pnpm --filter @focus-tracker/api dev` terminal) and re-run `pnpm install`.
+
+### `tauri dev` fails with "cargo not found"
+
+You haven't installed the Rust toolchain. See §1 — `winget install Rustlang.Rustup`, restart your shell, then `rustup default stable`.
+
 ---
 
 ## 6. Where things live
@@ -217,6 +239,24 @@ Click "pin to Prisma 6" on the popup. We're intentionally on the 6.x line — se
 │       │   └── index.css            # Tailwind v4 inline @theme
 │       ├── vite.config.ts           # Vite + plugins + /v1 proxy to API
 │       └── .env.example             # Copy to .env.local for local dev
+├── apps/
+│   └── desktop/                     # Tauri 2 desktop telemetry client
+│       ├── src/                     # React settings + pairing UI
+│       ├── src-tauri/               # Rust core
+│       │   ├── Cargo.toml
+│       │   ├── tauri.conf.json
+│       │   ├── capabilities/        # Tauri 2 permissions per window
+│       │   ├── icons/               # App + tray icons (placeholders)
+│       │   └── src/
+│       │       ├── main.rs          # Thin binary entry
+│       │       ├── lib.rs           # App + tray setup
+│       │       ├── commands.rs      # #[tauri::command]s the React side calls
+│       │       ├── pairing.rs       # POST /v1/devices/pairing-codes client
+│       │       ├── keychain.rs      # OS keychain wrapper for the API key
+│       │       ├── config.rs        # config.json on disk
+│       │       ├── events.rs        # Wire shapes mirrored from shared/
+│       │       └── errors.rs
+│       └── package.json
 └── packages/
     └── shared/                      # TS types + Zod schemas shared by api + web
         └── src/

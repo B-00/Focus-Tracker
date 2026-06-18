@@ -1,0 +1,111 @@
+//! Plaintext on-disk config (`config.json`) next to the outbox file.
+//!
+//! Holds non-secret state the daemon needs across launches:
+//!   * `api_base_url`     — where to ship telemetry (DesktopApp.md §19)
+//!   * `device_id`        — UUIDv4 generated once at install
+//!   * `label`            — user-visible name (default: hostname)
+//!   * `last_flush_at`    — last successful batch ack (informational, in UI)
+//!
+//! The API key itself never lives here — it's in the OS keychain
+//! (see `keychain.rs`). The `device_id` is plaintext fine; it has no auth
+//! power on its own (the API key bound to it does).
+
+use crate::errors::{AppError, AppResult};
+use directories::ProjectDirs;
+use serde::{Deserialize, Serialize};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
+use uuid::Uuid;
+
+pub const QUALIFIER: &str = "app";
+pub const ORG: &str = "Focus Tracker";
+pub const APP: &str = "Focus Tracker";
+
+pub const DEFAULT_API_BASE_URL: &str = "http://localhost:3000";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DesktopConfig {
+    #[serde(default = "default_api_base_url")]
+    pub api_base_url: String,
+
+    /// Persistent UUIDv4 — never changes after first launch.
+    pub device_id: String,
+
+    /// Display label shown in the web app's Settings → Devices. Mutable.
+    pub label: String,
+
+    /// ISO-8601. None until first successful batch ack.
+    #[serde(default)]
+    pub last_flush_at: Option<String>,
+}
+
+fn default_api_base_url() -> String {
+    DEFAULT_API_BASE_URL.to_string()
+}
+
+impl DesktopConfig {
+    /// Loads from disk, or initialises a fresh one and writes it through.
+    pub fn load_or_init() -> AppResult<Self> {
+        let path = config_path()?;
+        if path.exists() {
+            return Self::load_from(&path);
+        }
+        let cfg = Self::initial();
+        cfg.save_to(&path)?;
+        Ok(cfg)
+    }
+
+    fn initial() -> Self {
+        let label = hostname::get()
+            .ok()
+            .and_then(|h| h.into_string().ok())
+            .unwrap_or_else(|| "This computer".to_string());
+        Self {
+            api_base_url: DEFAULT_API_BASE_URL.to_string(),
+            device_id: Uuid::new_v4().to_string(),
+            label,
+            last_flush_at: None,
+        }
+    }
+
+    pub fn load_from(path: &Path) -> AppResult<Self> {
+        let bytes = fs::read(path)?;
+        Ok(serde_json::from_slice(&bytes)?)
+    }
+
+    pub fn save(&self) -> AppResult<()> {
+        let path = config_path()?;
+        self.save_to(&path)
+    }
+
+    fn save_to(&self, path: &Path) -> AppResult<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        // Atomic write: tmp + rename. Crash-safe on POSIX and Windows.
+        let tmp = path.with_extension("json.tmp");
+        let json = serde_json::to_vec_pretty(self)?;
+        {
+            let mut f = fs::File::create(&tmp)?;
+            f.write_all(&json)?;
+            f.sync_all()?;
+        }
+        fs::rename(&tmp, path)?;
+        Ok(())
+    }
+}
+
+/// Returns `<data_dir>/config.json`, where `<data_dir>` is the platform's
+/// per-app data dir (DesktopApp.md §8.1):
+///   * Windows  — `%APPDATA%\FocusTracker\`
+///   * macOS    — `~/Library/Application Support/Focus Tracker/`
+///   * Linux    — `~/.local/share/focus-tracker/`
+pub fn config_path() -> AppResult<PathBuf> {
+    let dirs = ProjectDirs::from(QUALIFIER, ORG, APP).ok_or_else(|| {
+        AppError::config("could not resolve a per-user data directory on this platform")
+    })?;
+    Ok(dirs.data_dir().join("config.json"))
+}

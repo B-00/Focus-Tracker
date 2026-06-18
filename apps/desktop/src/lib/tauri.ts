@@ -1,0 +1,78 @@
+// Typed wrappers around the Tauri `invoke` bridge. Keeps the React side from
+// stringly-typed command names and centralises the marshalling shapes so
+// the Rust side (src-tauri/src/commands.rs) and TS side share one contract.
+//
+// Each function here matches one `#[tauri::command] fn ...` in commands.rs;
+// keep the names in sync.
+
+import { invoke } from '@tauri-apps/api/core';
+
+/// State the React app needs to render the right screen on launch.
+/// Mirrors `DesktopState` in commands.rs.
+export interface DesktopState {
+  /// Path to the on-disk config file (informational; shown in the UI).
+  configPath: string;
+  /// Currently-configured API base URL.
+  apiBaseUrl: string;
+  /// True if a device record + API key are present.
+  paired: boolean;
+  /// Persistent UUIDv4 this install uses to identify itself.
+  deviceId: string;
+  /// User-editable display label (default: hostname).
+  label: string;
+  /// Last reported by the daemon — null on a fresh install.
+  lastFlushAt: string | null;
+}
+
+/// Returned by `start_pairing` — opaque handle the React side polls against.
+export interface PairingHandle {
+  code: string;
+  expiresAt: string;
+}
+
+/// `poll_pairing` returns one of these.
+export type PairingStatus =
+  | { status: 'pending' }
+  | { status: 'claimed'; deviceId: string; label: string }
+  | { status: 'expired' };
+
+/// Returns the current desktop daemon state. Called on startup + after every
+/// successful command that mutates the state.
+export async function getState(): Promise<DesktopState> {
+  return invoke<DesktopState>('get_state');
+}
+
+/// Persists the API base URL the daemon will pair against. Refuses when a
+/// device is already paired (Rust side enforces — DesktopApp.md §19).
+export async function setApiBaseUrl(url: string): Promise<DesktopState> {
+  return invoke<DesktopState>('set_api_base_url', { url });
+}
+
+/// Hits the configured API's `POST /v1/devices/pairing-codes` and returns
+/// the freshly-minted 6-digit code. Pairing state is persisted in-memory
+/// in the Rust daemon and finalised when the user runs `poll_pairing` and
+/// gets `claimed`.
+export async function startPairing(): Promise<PairingHandle> {
+  return invoke<PairingHandle>('start_pairing');
+}
+
+/// Polls `GET /v1/devices/pairing-codes/:code` and either returns `pending`
+/// / `expired`, or — on `claimed` — atomically writes the API key to the
+/// OS keychain and the device row to disk before returning.
+export async function pollPairing(): Promise<PairingStatus> {
+  return invoke<PairingStatus>('poll_pairing');
+}
+
+/// Cancels any in-flight pairing handle (no API call — server-side codes
+/// expire on their own).
+export async function cancelPairing(): Promise<void> {
+  return invoke<void>('cancel_pairing');
+}
+
+/// Wipes the API key from the keychain and the device row from disk.
+/// The Device row in the API DB is NOT revoked from this side — that lives
+/// in the web app's Settings → Devices. If the user wants a full unpair,
+/// they should also revoke via the web app.
+export async function unpairLocal(): Promise<DesktopState> {
+  return invoke<DesktopState>('unpair_local');
+}
