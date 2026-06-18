@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -11,8 +11,8 @@ const TAURI_DEV_PORT = 1420;
 // (e.g. mobile / VM testing). Fall back to undefined → loopback only.
 const TAURI_DEV_HOST = process.env.TAURI_DEV_HOST;
 
-export default defineConfig(async () => ({
-  plugins: [react(), tailwindcss()],
+export default defineConfig({
+  plugins: [react(), tailwindcss()] as PluginOption[],
 
   // Tauri-recommended dev server posture: strictPort so HMR doesn't silently
   // move to 1421 and break the webview; hmr host pinned when running on a
@@ -36,10 +36,11 @@ export default defineConfig(async () => ({
   // build-time platform info (e.g. import.meta.env.TAURI_ENV_PLATFORM).
   envPrefix: ['VITE_', 'TAURI_ENV_'],
 
+  // Targeting a recent Chromium fits WebView2 (Windows) and modern WebKit
+  // (macOS 12+). Tauri's docs recommend chrome105 / safari13 as the floor.
   build: {
-    target:
-      process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
+    target: ['chrome105', 'safari13'],
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
-    minify: process.env.TAURI_ENV_DEBUG ? false : 'esbuild',
+    minify: !process.env.TAURI_ENV_DEBUG,
   },
-}));
+});
