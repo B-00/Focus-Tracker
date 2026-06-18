@@ -4,13 +4,16 @@
 //! controls).
 //!
 //! Polls the OS once per `POLL_INTERVAL` for:
-//!   * which app/window is currently in the foreground
+//!   * which app is currently in the foreground (app-level only — we
+//!     deliberately don't read window titles, per spec §2 Non-Goals)
 //!   * how long since the last user input
 //!
 //! Behaviour:
-//!   * **Active → Active, same window**: do nothing
-//!   * **Active → Active, different window**: emit a `focus_change` for the
-//!     event we just ended (start..now), start a fresh in-flight event
+//!   * **Active → Active, same app**: do nothing. Tab/document switches
+//!     inside the same app are intentionally ignored — they'd fragment
+//!     the rollup table and leak document names.
+//!   * **Active → Active, different app**: emit a `focus_change` for the
+//!     event we just ended (start..now), start a fresh in-flight event.
 //!   * **Active → Idle** (no input ≥ `IDLE_THRESHOLD`): emit the in-flight
 //!     event with `endedAt = lastInputTime` (clamped to ≥ startedAt), so we
 //!     don't credit "user was in Cursor for 9 hours" to a closed laptop.
@@ -53,13 +56,15 @@ pub const IDLE_THRESHOLD: Duration = Duration::from_secs(60);
 // ---------------------------------------------------------------------------
 
 /// Snapshot of the foreground window at one instant.
+///
+/// Note: deliberately does NOT carry the window title. v1 captures at
+/// app granularity only (DesktopApp.md §2 Non-Goals).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FocusSnapshot {
     pub app_name: String,
     /// Full process path on Windows; bundle id on macOS where available.
     /// Reused as `appBundleId` on the wire when present.
     pub app_bundle_id: Option<String>,
-    pub window_title: String,
 }
 
 pub trait FocusSource: Send + Sync + 'static {
@@ -99,7 +104,6 @@ impl FocusSource for LiveFocusSource {
                     let p = w.process_path.to_string_lossy().to_string();
                     if p.is_empty() { None } else { Some(p) }
                 },
-                window_title: w.title,
             }),
             Err(_) => None,
         }
@@ -125,7 +129,6 @@ impl IdleSource for LiveIdleSource {
 struct InFlightFocus {
     app_name: String,
     app_bundle_id: Option<String>,
-    window_title: String,
     started_at: OffsetDateTime,
 }
 
@@ -138,17 +141,14 @@ enum CaptureState {
 /// Knobs the runtime can flip while the capture loop is running.
 #[derive(Debug, Clone)]
 pub struct CaptureFlags {
-    /// `false` → ship `windowTitle` as `None` (DesktopApp.md §11). Default `true`.
-    pub track_titles: Arc<AtomicBool>,
     /// `true` → loop ticks but emits nothing and finalises the in-flight
     /// event. Re-enabling resumes from whatever the foreground is then.
     pub paused: Arc<AtomicBool>,
 }
 
 impl CaptureFlags {
-    pub fn new(track_titles: bool, paused: bool) -> Self {
+    pub fn new(paused: bool) -> Self {
         Self {
-            track_titles: Arc::new(AtomicBool::new(track_titles)),
             paused: Arc::new(AtomicBool::new(paused)),
         }
     }
@@ -246,19 +246,18 @@ impl CaptureLoop {
                         emit_now = Some((curr.clone(), bound));
                         new_state = Some(CaptureState::Idle);
                     } else if let Some(snap) = self.focus.current() {
-                        if snap.app_name != curr.app_name
-                            || snap.window_title != curr.window_title
-                        {
+                        // App-level switch detection only. Same-app
+                        // title/tab churn is ignored by design.
+                        if snap.app_name != curr.app_name {
                             emit_now = Some((curr.clone(), now));
                             new_state = Some(CaptureState::Active(InFlightFocus {
                                 app_name: snap.app_name,
                                 app_bundle_id: snap.app_bundle_id,
-                                window_title: snap.window_title,
                                 started_at: now,
                             }));
                         }
                     }
-                    // No focus source / same window: nothing to do.
+                    // No focus source / same app: nothing to do.
                 }
                 CaptureState::Idle => {
                     if !is_idle {
@@ -266,7 +265,6 @@ impl CaptureLoop {
                             new_state = Some(CaptureState::Active(InFlightFocus {
                                 app_name: snap.app_name,
                                 app_bundle_id: snap.app_bundle_id,
-                                window_title: snap.window_title,
                                 started_at: now,
                             }));
                         }
@@ -306,15 +304,6 @@ impl CaptureLoop {
     }
 
     fn make_focus_event(&self, ev: &InFlightFocus, ended_at: OffsetDateTime) -> StoredEvent {
-        let title = if self.flags.track_titles.load(Ordering::Relaxed) {
-            if ev.window_title.is_empty() {
-                None
-            } else {
-                Some(ev.window_title.clone())
-            }
-        } else {
-            None
-        };
         let dur_ms = (ended_at - ev.started_at).whole_milliseconds().max(0) as u64;
         let live = TelemetryEvent {
             id: new_event_id(),
@@ -323,7 +312,11 @@ impl CaptureLoop {
             target: TargetPayload::Focus(DesktopFocusTarget {
                 app_name: ev.app_name.clone(),
                 app_bundle_id: ev.app_bundle_id.clone(),
-                window_title: title,
+                // window_title is deliberately never set on the desktop
+                // client — DesktopApp.md §2 Non-Goals. The field stays in
+                // the shared wire schema as Option<...> for the browser
+                // extension and any future sources that might use it.
+                window_title: None,
             }),
             started_at: ev.started_at,
             ended_at: Some(ended_at),
@@ -369,11 +362,10 @@ mod tests {
         }
     }
 
-    fn snap(app: &str, title: &str) -> FocusSnapshot {
+    fn snap(app: &str) -> FocusSnapshot {
         FocusSnapshot {
             app_name: app.into(),
             app_bundle_id: None,
-            window_title: title.into(),
         }
     }
 
@@ -389,7 +381,6 @@ mod tests {
             device_id: "test".into(),
             label: "test".into(),
             last_flush_at: None,
-            track_titles: true,
             paused: false,
         }
     }
@@ -403,7 +394,7 @@ mod tests {
             outbox,
             focus,
             idle,
-            CaptureFlags::new(true, false),
+            CaptureFlags::new(false),
             &fake_config(),
         )
     }
@@ -414,7 +405,7 @@ mod tests {
     async fn idle_to_active_starts_tracking_but_emits_nothing_yet() {
         let (_dir, ob) = fresh_outbox();
         let cap = make_loop(
-            Box::new(FakeFocus::from_vec(vec![Some(snap("Cursor", "events.rs"))])),
+            Box::new(FakeFocus::from_vec(vec![Some(snap("Cursor"))])),
             Box::new(FakeIdle::from_vec(vec![Duration::ZERO])),
             ob.clone(),
         );
@@ -429,37 +420,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn window_switch_emits_focus_change_for_previous_window() {
+    async fn app_switch_emits_focus_change_for_previous_app() {
         let (_dir, ob) = fresh_outbox();
         let cap = make_loop(
             Box::new(FakeFocus::from_vec(vec![
-                Some(snap("Cursor", "a.rs")),
-                Some(snap("Cursor", "b.rs")), // window title changed → switch
+                Some(snap("Cursor")),
+                Some(snap("Firefox")), // different app → switch
             ])),
-            Box::new(FakeIdle::from_vec(vec![
-                Duration::ZERO,
-                Duration::ZERO,
-            ])),
+            Box::new(FakeIdle::from_vec(vec![Duration::ZERO, Duration::ZERO])),
             ob.clone(),
         );
         cap.tick().await.unwrap(); // idle→active
-        cap.tick().await.unwrap(); // active→active different
+        cap.tick().await.unwrap(); // Cursor → Firefox
         let events = ob.drain_head(10).await.unwrap();
-        assert_eq!(events.len(), 1, "exactly one focus_change for the prior window");
+        assert_eq!(events.len(), 1, "exactly one focus_change for Cursor");
         assert_eq!(events[0].kind, EventKind::FocusChange);
         let target = events[0].target.as_object().unwrap();
         assert_eq!(target.get("appName").unwrap().as_str().unwrap(), "Cursor");
-        assert_eq!(target.get("windowTitle").unwrap().as_str().unwrap(), "a.rs");
+        assert!(
+            target.get("windowTitle").is_none(),
+            "desktop client must never emit windowTitle (DesktopApp.md §2 Non-Goals)"
+        );
     }
 
     #[tokio::test]
-    async fn same_window_emits_nothing() {
+    async fn same_app_emits_nothing_even_across_many_ticks() {
         let (_dir, ob) = fresh_outbox();
+        // Three ticks all reporting "Cursor" — no app change, no event.
         let cap = make_loop(
             Box::new(FakeFocus::from_vec(vec![
-                Some(snap("Cursor", "a.rs")),
-                Some(snap("Cursor", "a.rs")),
-                Some(snap("Cursor", "a.rs")),
+                Some(snap("Cursor")),
+                Some(snap("Cursor")),
+                Some(snap("Cursor")),
             ])),
             Box::new(FakeIdle::from_vec(vec![
                 Duration::ZERO,
@@ -475,13 +467,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn title_change_within_same_app_emits_nothing() {
+        // Regression guard for the v1 "app-only tracking" requirement.
+        // The fake focus source only carries app_name now, so the only way
+        // a title change could be visible is via a future regression of the
+        // FocusSnapshot shape — but we still want a behavioural assertion
+        // that two "Cursor" snapshots in a row don't produce a second
+        // event regardless of any internal state. (Real-world parallel:
+        // user switches files inside Cursor.)
+        let (_dir, ob) = fresh_outbox();
+        let cap = make_loop(
+            Box::new(FakeFocus::from_vec(vec![
+                Some(snap("Cursor")),
+                Some(snap("Cursor")),
+            ])),
+            Box::new(FakeIdle::from_vec(vec![Duration::ZERO, Duration::ZERO])),
+            ob.clone(),
+        );
+        cap.tick().await.unwrap();
+        cap.tick().await.unwrap();
+        assert_eq!(ob.len().await.unwrap(), 0);
+    }
+
+    #[tokio::test]
     async fn idle_bounds_in_flight_event_and_stops_tracking() {
         let (_dir, ob) = fresh_outbox();
         let cap = make_loop(
             Box::new(FakeFocus::from_vec(vec![
-                Some(snap("Cursor", "a.rs")),
-                Some(snap("Cursor", "a.rs")),
-                Some(snap("Cursor", "a.rs")),
+                Some(snap("Cursor")),
+                Some(snap("Cursor")),
+                Some(snap("Cursor")),
             ])),
             Box::new(FakeIdle::from_vec(vec![
                 Duration::ZERO,                              // active
@@ -504,38 +519,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn track_titles_off_drops_window_title() {
-        let (_dir, ob) = fresh_outbox();
-        let cap = CaptureLoop::new(
-            ob.clone(),
-            Box::new(FakeFocus::from_vec(vec![
-                Some(snap("Cursor", "secret.md")),
-                Some(snap("Cursor", "other.md")),
-            ])),
-            Box::new(FakeIdle::from_vec(vec![Duration::ZERO, Duration::ZERO])),
-            CaptureFlags::new(false, false), // titles OFF
-            &fake_config(),
-        );
-        cap.tick().await.unwrap();
-        cap.tick().await.unwrap();
-        let events = ob.drain_head(10).await.unwrap();
-        assert_eq!(events.len(), 1);
-        let target = events[0].target.as_object().unwrap();
-        assert_eq!(target.get("appName").unwrap().as_str().unwrap(), "Cursor");
-        assert!(
-            target.get("windowTitle").is_none(),
-            "track_titles=false must drop windowTitle from the payload"
-        );
-    }
-
-    #[tokio::test]
     async fn paused_loop_finalises_inflight_and_emits_nothing_new() {
         let (_dir, ob) = fresh_outbox();
         let cap = CaptureLoop::new(
             ob.clone(),
-            Box::new(FakeFocus::from_vec(vec![Some(snap("Cursor", "a.rs"))])),
+            Box::new(FakeFocus::from_vec(vec![Some(snap("Cursor"))])),
             Box::new(FakeIdle::from_vec(vec![Duration::ZERO])),
-            CaptureFlags::new(true, false),
+            CaptureFlags::new(false),
             &fake_config(),
         );
         cap.tick().await.unwrap(); // active established

@@ -31,14 +31,14 @@ Mirrors the main project (see `PROJECT.md` §1.1):
 - Cross-platform: Windows, macOS, Linux from one codebase.
 - Tiny footprint — low CPU when idle, ~10 MB binary, single-digit MB of RAM.
 - Survive sleep/wake, network outages, crashes.
-- Respect privacy: "track window titles" toggle, never-captured list of sensitive event categories (see §11).
+- Respect privacy: app-only tracking (no window titles, ever), never-captured list of sensitive event categories (see §11).
 - Background-first UX: system tray + small settings window only.
 
 ### Non-Goals (v1)
 - **Never** captured: keystrokes, mouse paths, screenshots, clipboard contents.
 - Mobile (iOS/Android) — separate surface, future.
 - Browser-internal tracking — the browser extension owns that.
-- Per-user-document tracking (we only see app + window title).
+- Per-window-title / per-document tracking. v1 captures the app only. Rationale: titles fragment the rollup table (Notion's "Project A" vs "Project B" become distinct rows even though both are "Notion"), inflate storage, and leak document names. App-level granularity is what "time on tools" reporting needs anyway.
 
 ---
 
@@ -99,9 +99,7 @@ The Tauri UI shell needs Microsoft's WebView2 runtime. Strategy: **`embedBootstr
 ## 5. OS-Level Permissions
 
 ### macOS
-- **Accessibility** — required to read window titles. Prompted on first run.
-- **Screen Recording** — required on macOS 12+ to read some window-title metadata in certain apps. Prompted only when needed.
-- Onboarding must clearly explain *why* each prompt appears and what happens if denied (app still works, but only at the app-name granularity, no window titles).
+- **No special permissions required** in v1. App-name detection via `NSWorkspace.frontmostApplication` is unrestricted; we deliberately don't read window titles, so the Accessibility and Screen Recording prompts that title-reading would require are avoided.
 
 ### Windows
 - No special permissions for foreground window detection (works identically on Win 10 1809+ and Win 11).
@@ -133,10 +131,10 @@ The Tauri UI shell needs Microsoft's WebView2 runtime. Strategy: **`embedBootstr
 ┌──────────────────────┐                ┌─────────────────────────────┐
 │ System Tray          │                │ Settings Window (React)     │
 │  - current app       │                │  - pairing flow             │
-│  - queue depth       │                │  - permissions checker      │
-│  - pause toggle      │                │  - track-titles toggle      │
-│  - open dashboard    │                │  - auto-launch toggle       │
-│  - settings…         │                │  - last sync, version, logs │
+│  - queue depth       │                │  - capture pause toggle     │
+│  - pause toggle      │                │  - auto-launch toggle       │
+│  - open dashboard    │                │  - recent activity feed     │
+│  - settings…         │                │  - last sync, version       │
 │  - quit              │                │                             │
 └──────────────────────┘                └─────────────────────────────┘
 ```
@@ -172,8 +170,8 @@ Same set as the browser extension:
   "target": {
     "kind": "app",
     "appName": "Cursor",
-    "appBundleId": "com.cursor.Cursor",            // macOS bundle id / Windows AUMID / Linux desktop-file id
-    "windowTitle": "PROJECT.md — Focus-Tracker"    // null if "track titles" is off
+    "appBundleId": "com.cursor.Cursor"             // macOS bundle id / Windows AUMID / Linux desktop-file id
+    // windowTitle is deliberately NEVER emitted — see §2 Non-Goals and §11
   },
   "category": null,
   "focusSessionId": null,
@@ -246,8 +244,8 @@ Identical contract to the extension (see `Extension.md` §9).
 
 | Control                              | Default     | Notes                                                       |
 | ------------------------------------ | ----------- | ----------------------------------------------------------- |
-| Track window titles                  | **On**      | Off → only `appName` / `appBundleId` is sent                |
-| Pause toggle (tray)                  | Off         | While paused: capture and flush both halt; queue preserved  |
+| App-only tracking                    | **Always on** | Window titles are never captured. Not user-toggleable — see §2 Non-Goals. |
+| Pause toggle (tray + settings)       | Off         | While paused: capture and flush both halt; queue preserved  |
 | Idle/sleep handling                  | Internal-only — used to bound `focus_change.endedAt`; not a wire event in v1 (see §7.1) |
 
 Things the app **never** captures, regardless of settings:

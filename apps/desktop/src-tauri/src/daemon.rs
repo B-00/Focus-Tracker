@@ -53,8 +53,8 @@ struct RunningHandle {
 }
 
 impl Daemon {
-    pub fn new(outbox: Arc<Outbox>, track_titles: bool, paused_initial: bool) -> Self {
-        let flags = CaptureFlags::new(track_titles, paused_initial);
+    pub fn new(outbox: Arc<Outbox>, paused_initial: bool) -> Self {
+        let flags = CaptureFlags::new(paused_initial);
         let flush_signals = FlushSignals::new(flags.paused.clone());
         // Seed the queue depth from whatever is already on disk so the UI
         // shows the right count before the daemon has flushed once.
@@ -83,14 +83,6 @@ impl Daemon {
 
     pub fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::Relaxed);
-    }
-
-    pub fn set_track_titles(&self, on: bool) {
-        self.capture_flags.track_titles.store(on, Ordering::Relaxed);
-    }
-
-    pub fn track_titles(&self) -> bool {
-        self.capture_flags.track_titles.load(Ordering::Relaxed)
     }
 
     pub fn queue_depth(&self) -> usize {

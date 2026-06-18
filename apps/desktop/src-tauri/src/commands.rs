@@ -31,7 +31,6 @@ pub struct DesktopState {
     // currently running; consumers should still gate UI on `paired`.
     pub daemon_running: bool,
     pub paused: bool,
-    pub track_titles: bool,
     pub queue_depth: usize,
 }
 
@@ -92,7 +91,6 @@ fn snapshot(state: &AppState) -> AppResult<DesktopState> {
         last_flush_at,
         daemon_running: daemon.is_running(),
         paused: daemon.is_paused(),
-        track_titles: daemon.track_titles(),
         queue_depth: daemon.queue_depth(),
     })
 }
@@ -244,20 +242,6 @@ pub fn set_paused(paused: bool, state: State<'_, AppState>) -> AppResult<Desktop
     snapshot(&state)
 }
 
-#[tauri::command]
-pub fn set_track_titles(enabled: bool, state: State<'_, AppState>) -> AppResult<DesktopState> {
-    state.daemon.set_track_titles(enabled);
-    {
-        let mut cfg = state
-            .config
-            .lock()
-            .map_err(|e| AppError::Internal(format!("config mutex poisoned: {e}")))?;
-        cfg.track_titles = enabled;
-        cfg.save()?;
-    }
-    snapshot(&state)
-}
-
 /// One row of the desktop "Recent activity" live feed. Flattened from
 /// `StoredEvent` so the frontend doesn't have to parse heterogeneous JSON
 /// `target` shapes itself.
@@ -269,9 +253,6 @@ pub struct RecentEventForFrontend {
     /// `appName` for desktop focus_change; `domain` for browser focus_change;
     /// `null` for heartbeat / session_start / session_end.
     pub app: Option<String>,
-    /// Window title for desktop focus_change (when track_titles is on),
-    /// page title for browser focus_change. `null` otherwise.
-    pub title: Option<String>,
     pub started_at: String,
     pub duration_ms: Option<u64>,
 }
@@ -290,12 +271,10 @@ pub fn get_recent_events(state: State<'_, AppState>) -> AppResult<Vec<RecentEven
 }
 
 fn flatten_event(e: crate::events::StoredEvent) -> RecentEventForFrontend {
-    let (app, title) = extract_app_and_title(&e);
     RecentEventForFrontend {
+        app: extract_app(&e),
         id: e.id,
         kind: e.kind,
-        app,
-        title,
         // RFC3339 is the wire format; the React side already speaks it via
         // `relativeTime()`. Fallback to empty on the (impossible) case the
         // format call fails — better than panicking inside a Tauri command.
@@ -304,28 +283,21 @@ fn flatten_event(e: crate::events::StoredEvent) -> RecentEventForFrontend {
     }
 }
 
-fn extract_app_and_title(e: &crate::events::StoredEvent) -> (Option<String>, Option<String>) {
+/// Pulls the user-visible label off a focus_change event's `target` JSON.
+/// Returns `None` for non-focus events (heartbeats, session lifecycle).
+///
+/// Cross-source:
+///   * desktop:  `target.appName`
+///   * browser:  `target.domain`  (future — when the extension ships)
+fn extract_app(e: &crate::events::StoredEvent) -> Option<String> {
     if e.kind != EventKind::FocusChange {
-        return (None, None);
+        return None;
     }
-    let obj = match e.target.as_object() {
-        Some(o) => o,
-        None => return (None, None),
-    };
-    // desktop: { appName, appBundleId?, windowTitle? }
-    // browser: { domain, url?, title? }
-    let app = obj
-        .get("appName")
+    let obj = e.target.as_object()?;
+    obj.get("appName")
         .or_else(|| obj.get("domain"))
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let title = obj
-        .get("windowTitle")
-        .or_else(|| obj.get("title"))
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string());
-    (app, title)
+        .map(|s| s.to_string())
 }
 
 /// Opens the configured API base URL in the user's default browser. We

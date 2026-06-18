@@ -41,11 +41,6 @@ pub struct DesktopConfig {
     #[serde(default)]
     pub last_flush_at: Option<String>,
 
-    /// Privacy toggle: when off, `focus_change` events drop `windowTitle`
-    /// (DesktopApp.md §11 — default ON).
-    #[serde(default = "default_true")]
-    pub track_titles: bool,
-
     /// Captured-paused toggle backed to disk so the daemon restores its
     /// last state across restarts.
     #[serde(default)]
@@ -54,10 +49,6 @@ pub struct DesktopConfig {
 
 fn default_api_base_url() -> String {
     DEFAULT_API_BASE_URL.to_string()
-}
-
-fn default_true() -> bool {
-    true
 }
 
 impl DesktopConfig {
@@ -82,7 +73,6 @@ impl DesktopConfig {
             device_id: Uuid::new_v4().to_string(),
             label,
             last_flush_at: None,
-            track_titles: true,
             paused: false,
         }
     }

@@ -5,7 +5,6 @@ import {
   getState,
   openDashboard,
   setPaused,
-  setTrackTitles,
   unpairLocal,
   type DesktopState,
   type RecentEvent,
@@ -34,103 +33,93 @@ export function Paired({ state: initial }: PairedProps) {
     mutationFn: setPaused,
     onSuccess: (next) => qc.setQueryData(['desktop-state'], next),
   });
-  const trackTitlesMutation = useMutation({
-    mutationFn: setTrackTitles,
-    onSuccess: (next) => qc.setQueryData(['desktop-state'], next),
-  });
   const openDashboardMutation = useMutation({ mutationFn: openDashboard });
 
+  // Layout: single column on small windows (default ~700px wide), 2-column
+  // grid on lg+ (≥1024px) so a maximised window puts controls on the left
+  // and the activity feed on the right, both filling the available space.
   return (
-    <section className="mx-auto flex max-w-md flex-col gap-5 px-6 py-7">
-      <header className="flex items-baseline justify-between gap-3">
+    <section className="mx-auto flex w-full max-w-md flex-col gap-5 px-6 py-7 lg:grid lg:max-w-6xl lg:grid-cols-[minmax(340px,420px)_1fr] lg:items-start lg:gap-6">
+      <header className="flex items-baseline justify-between gap-3 lg:col-span-2">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Connected</h1>
           <p className="mt-1 text-xs text-neutral-400">
-            Capturing foreground-window activity for {state.label}.
+            Capturing app-level activity for {state.label}.
           </p>
         </div>
-        <StatusDot
-          running={state.daemonRunning}
-          paused={state.paused}
-        />
+        <StatusDot running={state.daemonRunning} paused={state.paused} />
       </header>
 
-      <div className="grid grid-cols-2 gap-3">
-        <Stat
-          label="Queue"
-          value={state.queueDepth.toString()}
-          hint={
-            state.queueDepth === 0
-              ? 'all caught up'
-              : state.queueDepth >= 50
-                ? 'flushing'
-                : 'waiting for tick'
-          }
-        />
-        <Stat
-          label="Last flush"
-          value={relativeTime(state.lastFlushAt)}
-          hint={state.lastFlushAt ? 'API ack' : '—'}
-        />
+      {/* Left column on lg+: stats + meta + capture toggle */}
+      <div className="flex flex-col gap-5">
+        <div className="grid grid-cols-2 gap-3">
+          <Stat
+            label="Queue"
+            value={state.queueDepth.toString()}
+            hint={
+              state.queueDepth === 0
+                ? 'all caught up'
+                : state.queueDepth >= 50
+                  ? 'flushing'
+                  : 'waiting for tick'
+            }
+          />
+          <Stat
+            label="Last flush"
+            value={relativeTime(state.lastFlushAt)}
+            hint={state.lastFlushAt ? 'API ack' : '—'}
+          />
+        </div>
+
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1.5 rounded-md border border-neutral-800 bg-neutral-900/40 p-4 text-xs">
+          <dt className="text-neutral-500">API base URL</dt>
+          <dd className="truncate text-right font-mono text-neutral-300" data-selectable>
+            {state.apiBaseUrl}
+          </dd>
+
+          <dt className="text-neutral-500">Device ID</dt>
+          <dd
+            className="truncate text-right font-mono text-[0.65rem] text-neutral-400"
+            data-selectable
+          >
+            {state.deviceId}
+          </dd>
+        </dl>
+
+        <fieldset className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 p-4 text-xs">
+          <legend className="px-1 text-[0.65rem] uppercase tracking-wider text-neutral-500">
+            Capture
+          </legend>
+          <Toggle
+            checked={!state.paused}
+            onChange={(on) => pauseMutation.mutate(!on)}
+            disabled={!state.daemonRunning || pauseMutation.isPending}
+            title="Capture"
+            subtitle={
+              state.paused
+                ? 'Paused — no new events recorded'
+                : 'Recording app focus changes and heartbeats'
+            }
+          />
+          <p className="border-t border-neutral-800 pt-3 text-[0.65rem] text-neutral-500">
+            Tracks app names only — window titles are never captured.
+          </p>
+        </fieldset>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => openDashboardMutation.mutate()}
+            className="flex-1 rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 transition hover:border-neutral-500 hover:bg-neutral-800/60"
+          >
+            Open dashboard
+          </button>
+          <UnpairButton />
+        </div>
       </div>
 
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1.5 rounded-md border border-neutral-800 bg-neutral-900/40 p-4 text-xs">
-        <dt className="text-neutral-500">API base URL</dt>
-        <dd className="truncate text-right font-mono text-neutral-300" data-selectable>
-          {state.apiBaseUrl}
-        </dd>
-
-        <dt className="text-neutral-500">Device ID</dt>
-        <dd
-          className="truncate text-right font-mono text-[0.65rem] text-neutral-400"
-          data-selectable
-        >
-          {state.deviceId}
-        </dd>
-      </dl>
-
-      <fieldset className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 p-4 text-xs">
-        <legend className="px-1 text-[0.65rem] uppercase tracking-wider text-neutral-500">
-          Capture
-        </legend>
-
-        <Toggle
-          checked={!state.paused}
-          onChange={(on) => pauseMutation.mutate(!on)}
-          disabled={!state.daemonRunning || pauseMutation.isPending}
-          title="Capture"
-          subtitle={
-            state.paused
-              ? 'Paused — no new events recorded'
-              : 'Recording focus changes and heartbeats'
-          }
-        />
-
-        <Toggle
-          checked={state.trackTitles}
-          onChange={(on) => trackTitlesMutation.mutate(on)}
-          disabled={trackTitlesMutation.isPending}
-          title="Track window titles"
-          subtitle={
-            state.trackTitles
-              ? 'Window titles included in events (default)'
-              : 'App names only — titles dropped at the source'
-          }
-        />
-
-        <RecentActivity daemonRunning={state.daemonRunning} />
-      </fieldset>
-
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => openDashboardMutation.mutate()}
-          className="flex-1 rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 transition hover:border-neutral-500 hover:bg-neutral-800/60"
-        >
-          Open dashboard
-        </button>
-        <UnpairButton />
-      </div>
+      {/* Right column on lg+ — fills remaining height/width */}
+      <RecentActivity daemonRunning={state.daemonRunning} />
     </section>
   );
 }
@@ -147,42 +136,42 @@ function RecentActivity({ daemonRunning }: { daemonRunning: boolean }) {
   });
 
   return (
-    <div className="space-y-2">
+    <section
+      aria-label="Recent activity"
+      className="flex flex-col gap-2 lg:h-[calc(100vh-12rem)] lg:min-h-[400px]"
+    >
       <div className="flex items-baseline justify-between">
         <p className="text-[0.65rem] uppercase tracking-wider text-neutral-500">
           Recent activity
         </p>
-        <p className="text-[0.6rem] text-neutral-600">
-          last {events.length} of 25
-        </p>
+        <p className="text-[0.6rem] text-neutral-600">last {events.length} of 25</p>
       </div>
       <ul
-        className="max-h-64 space-y-0.5 overflow-y-auto rounded border border-neutral-800 bg-neutral-950/60 p-1.5 font-mono text-[0.65rem]"
+        className="max-h-64 flex-1 space-y-0.5 overflow-y-auto rounded border border-neutral-800 bg-neutral-950/60 p-1.5 font-mono text-[0.65rem] lg:max-h-none"
         aria-live="polite"
       >
         {!daemonRunning && (
-          <li className="px-2 py-2 text-neutral-500">
-            Daemon idle — start by pairing.
-          </li>
+          <li className="px-2 py-2 text-neutral-500">Daemon idle — start by pairing.</li>
         )}
         {daemonRunning && isLoading && (
           <li className="px-2 py-2 text-neutral-500">Loading…</li>
         )}
         {daemonRunning && !isLoading && events.length === 0 && (
           <li className="px-2 py-2 text-neutral-500">
-            No events yet. Switch windows or wait a minute for a heartbeat.
+            No events yet. Switch apps or wait a minute for a heartbeat.
           </li>
         )}
         {events.map((event) => (
           <EventRow key={event.id} event={event} />
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
 function EventRow({ event }: { event: RecentEvent }) {
   const kindStyle = KIND_STYLES[event.kind];
+  const label = describeEvent(event);
   return (
     <li className="flex items-center gap-2 rounded px-2 py-1 hover:bg-neutral-900/60">
       <span
@@ -191,8 +180,8 @@ function EventRow({ event }: { event: RecentEvent }) {
       >
         {kindStyle.label}
       </span>
-      <span className="min-w-0 flex-1 truncate text-neutral-300" title={describeEvent(event)}>
-        {describeEvent(event)}
+      <span className="min-w-0 flex-1 truncate text-neutral-300" title={label}>
+        {label}
       </span>
       <span className="shrink-0 text-neutral-500">{formatDuration(event.durationMs)}</span>
       <span
@@ -232,9 +221,7 @@ function describeEvent(event: RecentEvent): string {
         ? 'capture started'
         : 'capture stopped';
   }
-  if (event.app && event.title) return `${event.app} — ${event.title}`;
-  if (event.app) return event.app;
-  return 'unknown focus target';
+  return event.app ?? 'unknown app';
 }
 
 function formatDuration(ms: number | null): string {

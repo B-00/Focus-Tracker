@@ -56,7 +56,7 @@ pub fn run() {
         }
     };
     let outbox = Arc::new(Outbox::new(outbox_path));
-    let daemon = Arc::new(Daemon::new(outbox.clone(), config.track_titles, config.paused));
+    let daemon = Arc::new(Daemon::new(outbox.clone(), config.paused));
 
     let _ = outbox; // ownership lives in `daemon`; we don't need the handle in lib.rs anymore
     let app_state = match AppState::new(config.clone(), daemon.clone()) {
@@ -101,7 +101,6 @@ pub fn run() {
             commands::cancel_pairing,
             commands::unpair_local,
             commands::set_paused,
-            commands::set_track_titles,
             commands::open_dashboard,
             commands::get_recent_events,
         ])

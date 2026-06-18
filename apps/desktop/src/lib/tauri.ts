@@ -28,9 +28,6 @@ export interface DesktopState {
   daemonRunning: boolean;
   /// Capture loop currently paused (via Settings or tray). Persisted.
   paused: boolean;
-  /// Privacy toggle: when false, `focus_change` events ship without
-  /// `windowTitle`. Default true. Persisted (DesktopApp.md §11).
-  trackTitles: boolean;
   /// Number of events currently sitting in the outbox waiting to flush.
   queueDepth: number;
 }
@@ -94,12 +91,6 @@ export async function setPaused(paused: boolean): Promise<DesktopState> {
   return invoke<DesktopState>('set_paused', { paused });
 }
 
-/// Toggles the privacy "Track window titles" setting (default ON).
-/// When off, focus_change events ship without `windowTitle`. Persisted.
-export async function setTrackTitles(enabled: boolean): Promise<DesktopState> {
-  return invoke<DesktopState>('set_track_titles', { enabled });
-}
-
 /// Opens the configured dashboard URL in the user's default browser. In
 /// dev, the Rust side rewrites `:3000` → `:5173` so this lands on the Vite
 /// dev server for the web app.
@@ -116,11 +107,8 @@ export interface RecentEvent {
   /// `appName` for desktop / `domain` for browser focus_change events.
   /// `null` for non-focus events (heartbeats and session lifecycle).
   app: string | null;
-  /// Window title (desktop) / page title (browser). `null` when the
-  /// privacy toggle is off or the event has no title.
-  title: string | null;
-  /// RFC3339 timestamp of when the foreground window switched to this
-  /// target (or when the lifecycle event fired).
+  /// RFC3339 timestamp of when the foreground app switched to this target
+  /// (or when the lifecycle event fired).
   startedAt: string;
   /// Bounded duration in ms. `null` for events that are pure timestamps
   /// (heartbeats, session_start, session_end).
