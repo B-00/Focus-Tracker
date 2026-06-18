@@ -23,7 +23,10 @@ use std::{
     collections::VecDeque,
     io::Write,
     path::{Path, PathBuf},
-    sync::Mutex as StdMutex,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex as StdMutex,
+    },
     time::Duration,
 };
 use time::OffsetDateTime;
@@ -36,10 +39,19 @@ pub const MAX_EVENTS: usize = 100_000;
 /// Max events the API accepts in one POST (PROJECT.md §7.2 / shared/telemetry.ts).
 pub const MAX_BATCH_SIZE: usize = 50;
 
-/// Size of the in-memory "recent activity" ring buffer the daemon exposes
-/// to the desktop UI's live feed. Independent of flush state — events
-/// stay in the ring even after the outbox file drops them post-ack.
-pub const RECENT_RING_CAPACITY: usize = 25;
+/// User-configurable ring buffer size — the "Recent activity" feed in the
+/// desktop UI. Bounded so a runaway setter can't OOM the daemon. 250 ×
+/// ~300 bytes per StoredEvent ≈ 75 KB, comfortably under any budget.
+pub const DEFAULT_RECENT_CAPACITY: usize = 25;
+pub const MIN_RECENT_CAPACITY: usize = 5;
+pub const MAX_RECENT_CAPACITY: usize = 250;
+
+/// Clamps to the [MIN, MAX] envelope. Used everywhere we accept an external
+/// capacity (config file, Tauri command) so a malformed value silently
+/// snaps to the nearest legal one instead of panicking the daemon.
+pub fn clamp_recent_capacity(cap: usize) -> usize {
+    cap.clamp(MIN_RECENT_CAPACITY, MAX_RECENT_CAPACITY)
+}
 
 pub struct Outbox {
     /// `<data_dir>/outbox.jsonl`
@@ -48,23 +60,26 @@ pub struct Outbox {
     tmp_path: PathBuf,
     /// Serialises all file IO so appends never interleave with rewrites.
     lock: Mutex<()>,
-    /// Bounded FIFO of the last `RECENT_RING_CAPACITY` events appended,
-    /// independent of flush state. Powers the desktop "Recent activity"
-    /// feed. Std mutex (sync) — it's only ever held for microseconds.
+    /// Bounded FIFO of the last N events appended, independent of flush
+    /// state. Powers the desktop "Recent activity" feed. Std mutex (sync)
+    /// — it's only ever held for microseconds. Capacity is user-tunable
+    /// via `set_recent_capacity`; reads are lock-free via `recent_cap`.
     recent: StdMutex<VecDeque<StoredEvent>>,
+    recent_cap: AtomicUsize,
 }
 
 impl Outbox {
-    pub fn new(path: PathBuf) -> Self {
+    pub fn new(path: PathBuf, recent_cap: usize) -> Self {
         let tmp_path = path.with_extension("jsonl.tmp");
+        let cap = clamp_recent_capacity(recent_cap);
         // Seed the ring from whatever's already in the file so the UI has
         // *something* to show right after launch (e.g. unsent events from
         // before the last shutdown). Best-effort; failures are silent.
-        let mut seed = VecDeque::with_capacity(RECENT_RING_CAPACITY);
+        let mut seed = VecDeque::with_capacity(cap);
         if let Ok(text) = std::fs::read_to_string(&path) {
             for line in text.lines().filter(|l| !l.is_empty()) {
                 if let Ok(ev) = serde_json::from_str::<StoredEvent>(line) {
-                    if seed.len() == RECENT_RING_CAPACITY {
+                    if seed.len() == cap {
                         seed.pop_front();
                     }
                     seed.push_back(ev);
@@ -76,7 +91,31 @@ impl Outbox {
             tmp_path,
             lock: Mutex::new(()),
             recent: StdMutex::new(seed),
+            recent_cap: AtomicUsize::new(cap),
         }
+    }
+
+    /// Adjusts the ring buffer's user-visible capacity. Shrinks: drop the
+    /// oldest events until the ring fits. Grows: nothing immediate — the
+    /// ring fills up naturally as new events arrive.
+    ///
+    /// Idempotent. Any value outside the [MIN, MAX] window is snapped via
+    /// `clamp_recent_capacity`.
+    pub fn set_recent_capacity(&self, requested: usize) -> usize {
+        let cap = clamp_recent_capacity(requested);
+        self.recent_cap.store(cap, Ordering::Relaxed);
+        let mut ring = self
+            .recent
+            .lock()
+            .expect("outbox recent ring mutex poisoned");
+        while ring.len() > cap {
+            ring.pop_front();
+        }
+        cap
+    }
+
+    pub fn recent_capacity(&self) -> usize {
+        self.recent_cap.load(Ordering::Relaxed)
     }
 
     pub fn path(&self) -> &Path {
@@ -92,11 +131,14 @@ impl Outbox {
         // Push to ring AFTER the disk write succeeded — we don't want a
         // failed flush to surface in the UI as "this event was captured"
         // when in fact it never hit durable storage.
+        let cap = self.recent_cap.load(Ordering::Relaxed);
         let mut ring = self
             .recent
             .lock()
             .expect("outbox recent ring mutex poisoned");
-        if ring.len() == RECENT_RING_CAPACITY {
+        // `while` rather than `if` so that a runtime cap-shrink that
+        // raced with this append still leaves the ring at ≤ cap.
+        while ring.len() >= cap {
             ring.pop_front();
         }
         ring.push_back(event.clone());
@@ -321,7 +363,13 @@ mod tests {
     fn fresh() -> (TempDir, Outbox) {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("outbox.jsonl");
-        (dir, Outbox::new(path))
+        (dir, Outbox::new(path, DEFAULT_RECENT_CAPACITY))
+    }
+
+    fn fresh_with_cap(cap: usize) -> (TempDir, Outbox) {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("outbox.jsonl");
+        (dir, Outbox::new(path, cap))
     }
 
     #[tokio::test]
@@ -475,7 +523,7 @@ mod tests {
     #[tokio::test]
     async fn recent_ring_caps_at_capacity_keeping_newest() {
         let (_dir, ob) = fresh();
-        for i in 0..(RECENT_RING_CAPACITY + 5) {
+        for i in 0..(DEFAULT_RECENT_CAPACITY + 5) {
             ob.append(&make_event(
                 &format!("e{i}"),
                 datetime!(2026-06-17 21:00:00 UTC),
@@ -484,10 +532,13 @@ mod tests {
             .unwrap();
         }
         let r = ob.recent_events();
-        assert_eq!(r.len(), RECENT_RING_CAPACITY);
+        assert_eq!(r.len(), DEFAULT_RECENT_CAPACITY);
         // Oldest events should be evicted; we should see e5..e29.
         assert_eq!(r.first().unwrap().id, "e5");
-        assert_eq!(r.last().unwrap().id, format!("e{}", RECENT_RING_CAPACITY + 4));
+        assert_eq!(
+            r.last().unwrap().id,
+            format!("e{}", DEFAULT_RECENT_CAPACITY + 4)
+        );
     }
 
     #[tokio::test]
@@ -496,7 +547,7 @@ mod tests {
         let path = dir.path().join("outbox.jsonl");
         // First Outbox: write some events.
         {
-            let ob = Outbox::new(path.clone());
+            let ob = Outbox::new(path.clone(), DEFAULT_RECENT_CAPACITY);
             for i in 0..3 {
                 ob.append(&make_event(
                     &format!("seed{i}"),
@@ -508,10 +559,68 @@ mod tests {
         }
         // Second Outbox over the same file should see the events in its
         // ring without us having to append anything new.
-        let ob2 = Outbox::new(path);
+        let ob2 = Outbox::new(path, DEFAULT_RECENT_CAPACITY);
         let r = ob2.recent_events();
         assert_eq!(r.len(), 3);
         assert_eq!(r.first().unwrap().id, "seed0");
+    }
+
+    #[tokio::test]
+    async fn recent_capacity_grow_then_fill_uses_new_size() {
+        // Start at min, fill, grow, fill more — total should reflect the
+        // newer (larger) cap, with all events preserved.
+        let (_dir, ob) = fresh_with_cap(MIN_RECENT_CAPACITY);
+        for i in 0..MIN_RECENT_CAPACITY {
+            ob.append(&make_event(
+                &format!("a{i}"),
+                datetime!(2026-06-17 21:00:00 UTC),
+            ))
+            .await
+            .unwrap();
+        }
+        assert_eq!(ob.recent_events().len(), MIN_RECENT_CAPACITY);
+        // Grow → existing events preserved (no truncation on grow).
+        let new_cap = ob.set_recent_capacity(MIN_RECENT_CAPACITY + 5);
+        assert_eq!(new_cap, MIN_RECENT_CAPACITY + 5);
+        assert_eq!(ob.recent_events().len(), MIN_RECENT_CAPACITY);
+        // Five more appends → ring is now at the new cap.
+        for i in 0..5 {
+            ob.append(&make_event(
+                &format!("b{i}"),
+                datetime!(2026-06-17 21:01:00 UTC),
+            ))
+            .await
+            .unwrap();
+        }
+        assert_eq!(ob.recent_events().len(), MIN_RECENT_CAPACITY + 5);
+    }
+
+    #[tokio::test]
+    async fn recent_capacity_shrink_drops_oldest_until_in_bounds() {
+        let (_dir, ob) = fresh_with_cap(20);
+        for i in 0..20 {
+            ob.append(&make_event(
+                &format!("e{i}"),
+                datetime!(2026-06-17 21:00:00 UTC),
+            ))
+            .await
+            .unwrap();
+        }
+        assert_eq!(ob.recent_events().len(), 20);
+        ob.set_recent_capacity(8);
+        let r = ob.recent_events();
+        assert_eq!(r.len(), 8);
+        // Newest preserved; oldest evicted.
+        assert_eq!(r.last().unwrap().id, "e19");
+        assert_eq!(r.first().unwrap().id, "e12");
+    }
+
+    #[tokio::test]
+    async fn recent_capacity_clamps_out_of_range_values() {
+        let (_dir, ob) = fresh();
+        assert_eq!(ob.set_recent_capacity(0), MIN_RECENT_CAPACITY);
+        assert_eq!(ob.set_recent_capacity(99_999), MAX_RECENT_CAPACITY);
+        assert_eq!(ob.recent_capacity(), MAX_RECENT_CAPACITY);
     }
 
     #[tokio::test]

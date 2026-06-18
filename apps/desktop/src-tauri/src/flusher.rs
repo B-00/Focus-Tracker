@@ -325,7 +325,10 @@ mod tests {
     fn fresh_outbox() -> (TempDir, Arc<Outbox>) {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("outbox.jsonl");
-        (dir, Arc::new(Outbox::new(path)))
+        (
+            dir,
+            Arc::new(Outbox::new(path, crate::outbox::DEFAULT_RECENT_CAPACITY)),
+        )
     }
 
     enum FakeBehaviour {

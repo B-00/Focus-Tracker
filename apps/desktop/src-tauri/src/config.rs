@@ -11,6 +11,7 @@
 //! power on its own (the API key bound to it does).
 
 use crate::errors::{AppError, AppResult};
+use crate::outbox::{clamp_recent_capacity, DEFAULT_RECENT_CAPACITY};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -45,10 +46,22 @@ pub struct DesktopConfig {
     /// last state across restarts.
     #[serde(default)]
     pub paused: bool,
+
+    /// Size of the "Recent activity" ring buffer the daemon keeps in
+    /// memory and the desktop UI renders. Persisted so the user's
+    /// preference survives restarts. Reads are clamped via
+    /// `clamp_recent_capacity` at load time, so an out-of-range value
+    /// in a hand-edited config snaps to the nearest legal one.
+    #[serde(default = "default_recent_capacity")]
+    pub recent_capacity: usize,
 }
 
 fn default_api_base_url() -> String {
     DEFAULT_API_BASE_URL.to_string()
+}
+
+fn default_recent_capacity() -> usize {
+    DEFAULT_RECENT_CAPACITY
 }
 
 impl DesktopConfig {
@@ -74,12 +87,17 @@ impl DesktopConfig {
             label,
             last_flush_at: None,
             paused: false,
+            recent_capacity: DEFAULT_RECENT_CAPACITY,
         }
     }
 
     pub fn load_from(path: &Path) -> AppResult<Self> {
         let bytes = fs::read(path)?;
-        Ok(serde_json::from_slice(&bytes)?)
+        let mut cfg: Self = serde_json::from_slice(&bytes)?;
+        // Defensive clamp: a hand-edited config with `recent_capacity: 0`
+        // or `99999` shouldn't be able to break the UI or OOM the ring.
+        cfg.recent_capacity = clamp_recent_capacity(cfg.recent_capacity);
+        Ok(cfg)
     }
 
     pub fn save(&self) -> AppResult<()> {

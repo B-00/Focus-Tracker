@@ -30,7 +30,17 @@ export interface DesktopState {
   paused: boolean;
   /// Number of events currently sitting in the outbox waiting to flush.
   queueDepth: number;
+  /// User-configurable ring buffer size for the Recent activity feed.
+  /// Persisted to `config.json`; clamped to `RECENT_CAPACITY_OPTIONS`'
+  /// envelope on the Rust side.
+  recentCapacity: number;
 }
+
+/// Preset values surfaced in the Paired view's Recent activity dropdown.
+/// Adding entries here doesn't require Rust changes — the daemon clamps
+/// whatever it receives to its supported [min, max] envelope.
+export const RECENT_CAPACITY_OPTIONS = [10, 25, 50, 100, 250] as const;
+export type RecentCapacity = (typeof RECENT_CAPACITY_OPTIONS)[number];
 
 /// Returned by `start_pairing` — opaque handle the React side polls against.
 export interface PairingHandle {
@@ -91,6 +101,14 @@ export async function setPaused(paused: boolean): Promise<DesktopState> {
   return invoke<DesktopState>('set_paused', { paused });
 }
 
+/// Resizes the in-memory Recent activity ring buffer and persists the
+/// preference. Out-of-range values are silently clamped by the Rust side
+/// so the UI can't put the daemon into a bad state. Returns the snapshot
+/// with the actually-applied `recentCapacity` echoed back.
+export async function setRecentCapacity(capacity: number): Promise<DesktopState> {
+  return invoke<DesktopState>('set_recent_capacity', { capacity });
+}
+
 /// Opens the configured dashboard URL in the user's default browser. In
 /// dev, the Rust side rewrites `:3000` → `:5173` so this lands on the Vite
 /// dev server for the web app.
@@ -115,9 +133,9 @@ export interface RecentEvent {
   durationMs: number | null;
 }
 
-/// Returns up to 25 of the most recent events the daemon has captured,
-/// newest first. Independent of flush state — events stay in the buffer
-/// even after the outbox flushes them to the API.
+/// Returns up to `recentCapacity` of the most recent events the daemon
+/// has captured, newest first. Independent of flush state — events stay
+/// in the buffer even after the outbox flushes them to the API.
 export async function getRecentEvents(): Promise<RecentEvent[]> {
   return invoke<RecentEvent[]>('get_recent_events');
 }

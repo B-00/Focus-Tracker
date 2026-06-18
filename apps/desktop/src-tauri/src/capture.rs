@@ -372,7 +372,10 @@ mod tests {
     fn fresh_outbox() -> (TempDir, Arc<Outbox>) {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("outbox.jsonl");
-        (dir, Arc::new(Outbox::new(path)))
+        (
+            dir,
+            Arc::new(Outbox::new(path, crate::outbox::DEFAULT_RECENT_CAPACITY)),
+        )
     }
 
     fn fake_config() -> DesktopConfig {
@@ -382,6 +385,7 @@ mod tests {
             label: "test".into(),
             last_flush_at: None,
             paused: false,
+            recent_capacity: crate::outbox::DEFAULT_RECENT_CAPACITY,
         }
     }
 

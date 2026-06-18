@@ -32,6 +32,9 @@ pub struct DesktopState {
     pub daemon_running: bool,
     pub paused: bool,
     pub queue_depth: usize,
+    /// Current size of the "Recent activity" ring buffer, persisted to
+    /// `config.json`. Reflects the user's preference; reads are clamped.
+    pub recent_capacity: usize,
 }
 
 /// `poll_pairing` return shape — matches the TS `PairingStatus`
@@ -92,6 +95,7 @@ fn snapshot(state: &AppState) -> AppResult<DesktopState> {
         daemon_running: daemon.is_running(),
         paused: daemon.is_paused(),
         queue_depth: daemon.queue_depth(),
+        recent_capacity: daemon.recent_capacity(),
     })
 }
 
@@ -242,6 +246,26 @@ pub fn set_paused(paused: bool, state: State<'_, AppState>) -> AppResult<Desktop
     snapshot(&state)
 }
 
+/// Resizes the in-memory "Recent activity" ring buffer and persists the
+/// preference. Out-of-range values are silently clamped to the daemon's
+/// supported envelope (see `outbox::MIN/MAX_RECENT_CAPACITY`).
+#[tauri::command]
+pub fn set_recent_capacity(
+    capacity: u32,
+    state: State<'_, AppState>,
+) -> AppResult<DesktopState> {
+    let applied = state.daemon.set_recent_capacity(capacity as usize);
+    {
+        let mut cfg = state
+            .config
+            .lock()
+            .map_err(|e| AppError::Internal(format!("config mutex poisoned: {e}")))?;
+        cfg.recent_capacity = applied;
+        cfg.save()?;
+    }
+    snapshot(&state)
+}
+
 /// One row of the desktop "Recent activity" live feed. Flattened from
 /// `StoredEvent` so the frontend doesn't have to parse heterogeneous JSON
 /// `target` shapes itself.
@@ -257,9 +281,9 @@ pub struct RecentEventForFrontend {
     pub duration_ms: Option<u64>,
 }
 
-/// Returns up to `RECENT_RING_CAPACITY` of the most recent events the
-/// daemon has captured, **newest first**, for the desktop UI live feed.
-/// Always succeeds; returns an empty list if the daemon hasn't captured
+/// Returns up to the current `recent_capacity` events the daemon has
+/// captured, **newest first**, for the desktop UI live feed. Always
+/// succeeds; returns an empty list if the daemon hasn't captured
 /// anything yet.
 #[tauri::command]
 pub fn get_recent_events(state: State<'_, AppState>) -> AppResult<Vec<RecentEventForFrontend>> {

@@ -5,7 +5,9 @@ import {
   getState,
   openDashboard,
   setPaused,
+  setRecentCapacity,
   unpairLocal,
+  RECENT_CAPACITY_OPTIONS,
   type DesktopState,
   type RecentEvent,
 } from '../lib/tauri';
@@ -119,12 +121,21 @@ export function Paired({ state: initial }: PairedProps) {
       </div>
 
       {/* Right column on lg+ — fills remaining height/width */}
-      <RecentActivity daemonRunning={state.daemonRunning} />
+      <RecentActivity
+        daemonRunning={state.daemonRunning}
+        capacity={state.recentCapacity}
+      />
     </section>
   );
 }
 
-function RecentActivity({ daemonRunning }: { daemonRunning: boolean }) {
+function RecentActivity({
+  daemonRunning,
+  capacity,
+}: {
+  daemonRunning: boolean;
+  capacity: number;
+}) {
   // Poll faster than getState() since this is the live feed. 2s feels
   // responsive without burning the bridge — captures are 1s-resolution
   // upstream so anything tighter would just observe noise.
@@ -144,7 +155,10 @@ function RecentActivity({ daemonRunning }: { daemonRunning: boolean }) {
         <p className="text-[0.65rem] uppercase tracking-wider text-neutral-500">
           Recent activity
         </p>
-        <p className="text-[0.6rem] text-neutral-600">last {events.length} of 25</p>
+        <CapacityPicker
+          shown={events.length}
+          capacity={capacity}
+        />
       </div>
       <ul
         className="max-h-64 flex-1 space-y-0.5 overflow-y-auto rounded border border-neutral-800 bg-neutral-950/60 p-1.5 font-mono text-[0.65rem] lg:max-h-none"
@@ -191,6 +205,55 @@ function EventRow({ event }: { event: RecentEvent }) {
         {relativeTime(event.startedAt)}
       </span>
     </li>
+  );
+}
+
+function CapacityPicker({
+  shown,
+  capacity,
+}: {
+  shown: number;
+  capacity: number;
+}) {
+  const qc = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: setRecentCapacity,
+    onSuccess: (next) => {
+      qc.setQueryData(['desktop-state'], next);
+      // Force a refetch so the feed reflects the new cap immediately
+      // instead of waiting for the 2s poll to discover the resize.
+      void qc.invalidateQueries({ queryKey: ['desktop-recent-events'] });
+    },
+  });
+
+  // Always render the current persisted capacity even if it's not one of
+  // the canonical presets (e.g. someone hand-edited config.json to 17).
+  // The Rust side clamps so it'll already be inside [MIN, MAX].
+  const options = RECENT_CAPACITY_OPTIONS.includes(
+    capacity as (typeof RECENT_CAPACITY_OPTIONS)[number],
+  )
+    ? RECENT_CAPACITY_OPTIONS
+    : ([...RECENT_CAPACITY_OPTIONS, capacity].sort(
+        (a, b) => a - b,
+      ) as readonly number[]);
+
+  return (
+    <label className="flex items-baseline gap-1.5 text-[0.6rem] text-neutral-600">
+      <span>last {shown} of</span>
+      <select
+        value={capacity}
+        disabled={mutation.isPending}
+        onChange={(e) => mutation.mutate(Number(e.target.value))}
+        aria-label="Recent activity buffer size"
+        className="cursor-pointer rounded border border-neutral-800 bg-neutral-900/80 px-1 py-px text-[0.6rem] text-neutral-400 transition hover:border-neutral-700 hover:text-neutral-200 focus:border-neutral-500 focus:text-neutral-200 focus:outline-none disabled:opacity-50"
+      >
+        {options.map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

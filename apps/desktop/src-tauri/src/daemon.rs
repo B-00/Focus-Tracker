@@ -95,6 +95,16 @@ impl Daemon {
         self.outbox.recent_events()
     }
 
+    pub fn recent_capacity(&self) -> usize {
+        self.outbox.recent_capacity()
+    }
+
+    /// Resizes the recent-activity ring. Returns the clamped value that
+    /// was actually applied so the caller can echo it back to the user.
+    pub fn set_recent_capacity(&self, cap: usize) -> usize {
+        self.outbox.set_recent_capacity(cap)
+    }
+
     pub fn last_flush_at(&self) -> Option<OffsetDateTime> {
         *self
             .flush_signals

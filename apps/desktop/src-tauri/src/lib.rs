@@ -55,7 +55,7 @@ pub fn run() {
             std::process::exit(1);
         }
     };
-    let outbox = Arc::new(Outbox::new(outbox_path));
+    let outbox = Arc::new(Outbox::new(outbox_path, config.recent_capacity));
     let daemon = Arc::new(Daemon::new(outbox.clone(), config.paused));
 
     let _ = outbox; // ownership lives in `daemon`; we don't need the handle in lib.rs anymore
@@ -101,6 +101,7 @@ pub fn run() {
             commands::cancel_pairing,
             commands::unpair_local,
             commands::set_paused,
+            commands::set_recent_capacity,
             commands::open_dashboard,
             commands::get_recent_events,
         ])
