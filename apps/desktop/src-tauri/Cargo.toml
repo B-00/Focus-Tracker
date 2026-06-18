@@ -58,6 +58,28 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Optional but useful: hostname for the default device label.
 hostname = "0.4"
 
+# ---------------------------------------------------------------------------
+#  Capture loop deps (slice 5)
+# ---------------------------------------------------------------------------
+# Foreground-window detection. Cross-platform: Win32 / NSWorkspace / X11.
+active-win-pos-rs = "0.8"
+# OS-level idle detection (no-input duration). Cross-platform.
+user-idle = "0.6"
+# ISO-8601 / RFC3339 timestamps. Way lighter than chrono.
+time = { version = "0.3", features = ["serde-well-known", "macros", "formatting", "parsing"] }
+# Client-side event IDs. ULID > UUIDv4 here because they're timestamp-sortable
+# and shorter; matches PROJECT.md §7.8 (ULID/UUIDv7).
+ulid = { version = "1", features = ["serde"] }
+# `async fn` in traits is stable in Rust ≥ 1.75 BUT the resulting traits are
+# not object-safe (can't be put behind `Arc<dyn ...>`). The flusher needs
+# trait objects so it can swap a real uploader for a fake in tests; the
+# `async-trait` macro fixes that by boxing the returned future.
+async-trait = "0.1"
+
+[dev-dependencies]
+# Temporary dirs for outbox file-IO tests.
+tempfile = "3"
+
 [features]
 # Used by Tauri's debug bundle. No-op for our code.
 default = ["custom-protocol"]

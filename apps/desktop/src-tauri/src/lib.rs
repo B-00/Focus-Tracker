@@ -3,29 +3,38 @@
 //! Top-level wiring:
 //!   * Initialise tracing (env-filter friendly).
 //!   * Load (or initialise) the on-disk config.
+//!   * Build the shared `Outbox` and `Daemon` orchestrator.
 //!   * Register Tauri-managed state (commands.rs::AppState).
-//!   * Build the system tray with Open / Quit menu items (DesktopApp.md §6).
+//!   * Build the system tray with Open / Pause / Resume / Open dashboard /
+//!     Quit menu items (DesktopApp.md §6).
 //!   * Intercept window close so it minimises to tray instead of quitting
 //!     the process — desktop daemon must keep running to capture activity.
-//!
-//! NOTE: The focus-capture loop and outbox + flusher live in Slice 5.
-//! For now the daemon is "online" only insofar as the tray + settings
-//! window are present.
+//!   * On startup, if paired, start the capture+flush daemon eagerly.
 
+mod capture;
 mod commands;
 mod config;
+mod daemon;
 mod errors;
 mod events;
+mod flusher;
 mod keychain;
+mod outbox;
 mod pairing;
 
-use crate::{commands::AppState, config::DesktopConfig};
+use crate::{
+    commands::AppState,
+    config::{outbox_path, DesktopConfig},
+    daemon::Daemon,
+    outbox::Outbox,
+};
+use std::sync::Arc;
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, WindowEvent,
 };
-use tracing::{error, info};
+use tracing::{debug, error, info, warn};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -34,14 +43,23 @@ pub fn run() {
     let config = match DesktopConfig::load_or_init() {
         Ok(c) => c,
         Err(e) => {
-            // Fatal-during-bootstrap. We can't show a window without
-            // running the app loop, so log + bail.
             eprintln!("[fatal] failed to load config: {e:?}");
             std::process::exit(1);
         }
     };
 
-    let app_state = match AppState::new(config) {
+    let outbox_path = match outbox_path() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[fatal] failed to resolve outbox path: {e:?}");
+            std::process::exit(1);
+        }
+    };
+    let outbox = Arc::new(Outbox::new(outbox_path));
+    let daemon = Arc::new(Daemon::new(outbox.clone(), config.track_titles, config.paused));
+
+    let _ = outbox; // ownership lives in `daemon`; we don't need the handle in lib.rs anymore
+    let app_state = match AppState::new(config.clone(), daemon.clone()) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("[fatal] failed to initialise AppState: {e:?}");
@@ -52,8 +70,17 @@ pub fn run() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(app_state)
-        .setup(|app| {
+        .setup(move |app| {
             build_tray(app.handle())?;
+            // Spawn a one-shot task that kicks off the daemon if we already
+            // have an API key in the keychain. We do this from setup() so
+            // the Tauri runtime is fully initialised before we touch state.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = autostart_daemon_if_paired(handle).await {
+                    warn!(?e, "autostart skipped");
+                }
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -73,14 +100,54 @@ pub fn run() {
             commands::poll_pairing,
             commands::cancel_pairing,
             commands::unpair_local,
+            commands::set_paused,
+            commands::set_track_titles,
+            commands::open_dashboard,
         ])
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!());
 
-    if let Err(e) = result {
-        error!(error = ?e, "fatal: tauri runtime exited with error");
-        eprintln!("[fatal] tauri runtime exited with error: {e:?}");
-        std::process::exit(1);
-    }
+    let app = match result {
+        Ok(a) => a,
+        Err(e) => {
+            error!(error = ?e, "fatal: tauri build failed");
+            eprintln!("[fatal] tauri build failed: {e:?}");
+            std::process::exit(1);
+        }
+    };
+
+    // Block on run so we can call daemon.stop() after the event loop exits.
+    let captured_daemon = daemon.clone();
+    app.run(move |_app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { .. } = event {
+            // Synchronous drain on the tokio runtime so the final flush
+            // gets a chance to land before we tear down.
+            tauri::async_runtime::block_on(captured_daemon.stop());
+        }
+    });
+}
+
+async fn autostart_daemon_if_paired(app: AppHandle) -> Result<(), String> {
+    let api_key = match keychain::read() {
+        Ok(Some(k)) => k,
+        Ok(None) => {
+            debug!("autostart: no API key in keychain — staying idle");
+            return Ok(());
+        }
+        Err(e) => return Err(format!("keychain read failed: {e}")),
+    };
+    let state = app.state::<AppState>();
+    let cfg = state
+        .config
+        .lock()
+        .map_err(|e| format!("config mutex poisoned: {e}"))?
+        .clone();
+    state
+        .daemon
+        .start(&cfg, api_key)
+        .await
+        .map_err(|e| format!("daemon start failed: {e}"))?;
+    info!("daemon autostarted from existing keychain pairing");
+    Ok(())
 }
 
 fn init_tracing() {
@@ -98,14 +165,16 @@ fn init_tracing() {
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    // Pause/resume is a stub today — the capture loop ships in slice 5.
-    // We keep the menu item in v1 so the tray UX is stable from day one.
     let open = MenuItem::with_id(app, "open-settings", "Open settings", true, None::<&str>)?;
-    let pause = MenuItem::with_id(app, "pause-stub", "Pause capture (TODO)", false, None::<&str>)?;
-    let separator =
-        tauri::menu::PredefinedMenuItem::separator(app)?;
+    let dashboard = MenuItem::with_id(app, "open-dashboard", "Open dashboard", true, None::<&str>)?;
+    let pause = MenuItem::with_id(app, "pause-capture", "Pause capture", true, None::<&str>)?;
+    let resume = MenuItem::with_id(app, "resume-capture", "Resume capture", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Focus Tracker", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &pause, &separator, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[&open, &dashboard, &separator, &pause, &resume, &separator, &quit],
+    )?;
 
     TrayIconBuilder::with_id("main-tray")
         .tooltip("Focus Tracker")
@@ -116,17 +185,37 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open-settings" => show_main_window(app),
+            "open-dashboard" => {
+                let state = app.state::<AppState>();
+                if let Err(e) = commands::open_dashboard(state, app.clone()) {
+                    warn!(?e, "open-dashboard failed");
+                }
+            }
+            "pause-capture" => {
+                let state = app.state::<AppState>();
+                if let Err(e) = commands::set_paused(true, state) {
+                    warn!(?e, "pause-capture failed");
+                }
+            }
+            "resume-capture" => {
+                let state = app.state::<AppState>();
+                if let Err(e) = commands::set_paused(false, state) {
+                    warn!(?e, "resume-capture failed");
+                }
+            }
             "quit" => {
-                // Explicit quit from the tray. Daemon shutdown happens
-                // synchronously; in slice 5 we'll add a "drain outbox
-                // before exit" pass here.
-                app.exit(0);
+                // Drain on the way out.
+                let state = app.state::<AppState>();
+                let daemon = state.daemon.clone();
+                let app_handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    daemon.stop().await;
+                    app_handle.exit(0);
+                });
             }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            // Left-click reveals the settings window — same UX as the
-            // browser extension's action button.
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,

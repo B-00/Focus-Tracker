@@ -6,14 +6,16 @@
 
 use crate::{
     config::{config_path, DesktopConfig},
+    daemon::Daemon,
     errors::{AppError, AppResult},
     events::PairingCodePollResponse,
     keychain,
     pairing::{PairingClient, PairingHandle},
 };
 use serde::Serialize;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::State;
+use time::format_description::well_known::Rfc3339;
 
 /// Mirrors `DesktopState` in `apps/desktop/src/lib/tauri.ts`.
 #[derive(Debug, Clone, Serialize)]
@@ -25,6 +27,12 @@ pub struct DesktopState {
     pub device_id: String,
     pub label: String,
     pub last_flush_at: Option<String>,
+    // Daemon-driven runtime state. Present whether or not the daemon is
+    // currently running; consumers should still gate UI on `paired`.
+    pub daemon_running: bool,
+    pub paused: bool,
+    pub track_titles: bool,
+    pub queue_depth: usize,
 }
 
 /// `poll_pairing` return shape — matches the TS `PairingStatus`
@@ -44,19 +52,20 @@ pub enum PairingStatusForFrontend {
 
 /// Tauri-managed shared state. All mutations go through `Mutex` since
 /// commands run on the Tauri command pool (multiple OS threads).
-#[derive(Debug)]
 pub struct AppState {
     pub config: Mutex<DesktopConfig>,
     pub pairing_handle: Mutex<Option<PairingHandle>>,
     pub pairing_client: PairingClient,
+    pub daemon: Arc<Daemon>,
 }
 
 impl AppState {
-    pub fn new(config: DesktopConfig) -> AppResult<Self> {
+    pub fn new(config: DesktopConfig, daemon: Arc<Daemon>) -> AppResult<Self> {
         Ok(Self {
             config: Mutex::new(config),
             pairing_handle: Mutex::new(None),
             pairing_client: PairingClient::new()?,
+            daemon,
         })
     }
 }
@@ -69,13 +78,22 @@ fn snapshot(state: &AppState) -> AppResult<DesktopState> {
         .clone();
     let paired = keychain::read()?.is_some();
     let path = config_path()?;
+    let daemon = &state.daemon;
+    let last_flush_at = daemon
+        .last_flush_at()
+        .and_then(|t| t.format(&Rfc3339).ok())
+        .or(cfg.last_flush_at.clone());
     Ok(DesktopState {
         config_path: path.display().to_string(),
         api_base_url: cfg.api_base_url,
         paired,
         device_id: cfg.device_id,
         label: cfg.label,
-        last_flush_at: cfg.last_flush_at,
+        last_flush_at,
+        daemon_running: daemon.is_running(),
+        paused: daemon.is_paused(),
+        track_titles: daemon.track_titles(),
+        queue_depth: daemon.queue_depth(),
     })
 }
 
@@ -155,7 +173,6 @@ pub async fn poll_pairing(
     match res {
         PairingCodePollResponse::Pending => Ok(PairingStatusForFrontend::Pending),
         PairingCodePollResponse::Expired => {
-            // Drop the stale handle; user must restart.
             let mut held = state
                 .pairing_handle
                 .lock()
@@ -164,12 +181,10 @@ pub async fn poll_pairing(
             Ok(PairingStatusForFrontend::Expired)
         }
         PairingCodePollResponse::Claimed { api_key, device } => {
-            // Persist the key in the OS keychain BEFORE clearing the
-            // handle, so a crash between the two leaves us recoverable
-            // (we'd see a paired state on next launch).
+            // Persist the key BEFORE clearing the handle, so a crash
+            // between the two leaves us recoverable.
             keychain::write(&api_key)?;
-            // Mirror the server-side label/deviceId into our local config.
-            {
+            let cfg_clone = {
                 let mut cfg = state
                     .config
                     .lock()
@@ -177,13 +192,18 @@ pub async fn poll_pairing(
                 cfg.label = device.label.clone();
                 cfg.device_id = device.id.clone();
                 cfg.save()?;
-            }
+                cfg.clone()
+            };
             {
                 let mut held = state
                     .pairing_handle
                     .lock()
                     .map_err(|e| AppError::Internal(format!("pairing mutex poisoned: {e}")))?;
                 *held = None;
+            }
+            // Fire up the capture + flush daemon now that we have a key.
+            if let Err(e) = state.daemon.start(&cfg_clone, api_key).await {
+                tracing::warn!(?e, "daemon failed to start after pairing");
             }
             Ok(PairingStatusForFrontend::Claimed {
                 device_id: device.id,
@@ -204,7 +224,65 @@ pub fn cancel_pairing(state: State<'_, AppState>) -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn unpair_local(state: State<'_, AppState>) -> AppResult<DesktopState> {
+pub async fn unpair_local(state: State<'_, AppState>) -> AppResult<DesktopState> {
+    state.daemon.stop().await;
     keychain::clear()?;
     snapshot(&state)
+}
+
+#[tauri::command]
+pub fn set_paused(paused: bool, state: State<'_, AppState>) -> AppResult<DesktopState> {
+    state.daemon.set_paused(paused);
+    {
+        let mut cfg = state
+            .config
+            .lock()
+            .map_err(|e| AppError::Internal(format!("config mutex poisoned: {e}")))?;
+        cfg.paused = paused;
+        cfg.save()?;
+    }
+    snapshot(&state)
+}
+
+#[tauri::command]
+pub fn set_track_titles(enabled: bool, state: State<'_, AppState>) -> AppResult<DesktopState> {
+    state.daemon.set_track_titles(enabled);
+    {
+        let mut cfg = state
+            .config
+            .lock()
+            .map_err(|e| AppError::Internal(format!("config mutex poisoned: {e}")))?;
+        cfg.track_titles = enabled;
+        cfg.save()?;
+    }
+    snapshot(&state)
+}
+
+/// Opens the configured API base URL in the user's default browser. We
+/// don't have a built-in dashboard URL — the API and the web app share an
+/// origin in dev, and a self-hosted prod deployment will too.
+#[tauri::command]
+pub fn open_dashboard(state: State<'_, AppState>, app: tauri::AppHandle) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    // In dev, the React web app lives on a different port from the API.
+    // Best-effort: rewrite localhost:3000 (API) → localhost:5173 (web) for
+    // the dashboard link. In prod they share an origin.
+    let url = {
+        let cfg = state
+            .config
+            .lock()
+            .map_err(|e| AppError::Internal(format!("config mutex poisoned: {e}")))?;
+        if cfg.api_base_url.contains("localhost:3000")
+            || cfg.api_base_url.contains("127.0.0.1:3000")
+        {
+            cfg.api_base_url
+                .replace(":3000", ":5173")
+        } else {
+            cfg.api_base_url.clone()
+        }
+    };
+    app.opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|e| AppError::Internal(format!("opener failed: {e}")))?;
+    Ok(())
 }

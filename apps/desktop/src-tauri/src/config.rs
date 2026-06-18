@@ -40,10 +40,24 @@ pub struct DesktopConfig {
     /// ISO-8601. None until first successful batch ack.
     #[serde(default)]
     pub last_flush_at: Option<String>,
+
+    /// Privacy toggle: when off, `focus_change` events drop `windowTitle`
+    /// (DesktopApp.md §11 — default ON).
+    #[serde(default = "default_true")]
+    pub track_titles: bool,
+
+    /// Captured-paused toggle backed to disk so the daemon restores its
+    /// last state across restarts.
+    #[serde(default)]
+    pub paused: bool,
 }
 
 fn default_api_base_url() -> String {
     DEFAULT_API_BASE_URL.to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl DesktopConfig {
@@ -68,6 +82,8 @@ impl DesktopConfig {
             device_id: Uuid::new_v4().to_string(),
             label,
             last_flush_at: None,
+            track_titles: true,
+            paused: false,
         }
     }
 
@@ -104,8 +120,17 @@ impl DesktopConfig {
 ///   * macOS    — `~/Library/Application Support/Focus Tracker/`
 ///   * Linux    — `~/.local/share/focus-tracker/`
 pub fn config_path() -> AppResult<PathBuf> {
+    Ok(data_dir()?.join("config.json"))
+}
+
+/// Returns `<data_dir>/outbox.jsonl` — see DesktopApp.md §8.1.
+pub fn outbox_path() -> AppResult<PathBuf> {
+    Ok(data_dir()?.join("outbox.jsonl"))
+}
+
+fn data_dir() -> AppResult<PathBuf> {
     let dirs = ProjectDirs::from(QUALIFIER, ORG, APP).ok_or_else(|| {
         AppError::config("could not resolve a per-user data directory on this platform")
     })?;
-    Ok(dirs.data_dir().join("config.json"))
+    Ok(dirs.data_dir().to_path_buf())
 }
