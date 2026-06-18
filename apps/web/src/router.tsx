@@ -5,15 +5,23 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/react-router';
+import { AppShell } from './components/AppShell';
 import { isJwtValid } from './lib/jwt';
 import { tokenStorage } from './lib/token-storage';
 import { LoginPage } from './routes/Login';
 import { DashboardPage } from './routes/Dashboard';
+import { SettingsPage } from './routes/Settings';
 
-// Code-based routing (no codegen). The route tree is tiny — `/login` and
-// `/` plus a catch-all "next" param. Once we add more routes per
-// PROJECT.md §7 we can switch to file-based routing with
-// @tanstack/router-plugin, but for v1 this is one less moving part.
+// Code-based routing (no codegen). Tree:
+//
+//   /login        — unauthenticated form
+//   /             — AppShell-wrapped protected layout
+//     /           — Dashboard
+//     /settings   — Settings (hash-based subsection switching, see Settings.tsx)
+//
+// Once we add more protected routes per PROJECT.md §7 we can switch to
+// file-based routing with @tanstack/router-plugin; for v1 this is one
+// less moving part.
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -40,9 +48,12 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
-const dashboardRoute = createRoute({
+/// Layout route: anything under this gets the AppShell (header nav,
+/// sign-out, future sticky session bar). The auth guard fires once at
+/// the layout level so we don't repeat it on every leaf route.
+const protectedLayout = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/',
+  id: 'protected',
   // Per Auth.md §12.4: missing token → bounce to /login with ?next=. An
   // expired-but-present token is allowed through — the Axios interceptor
   // will refresh on the first API call, avoiding a redirect flash.
@@ -56,10 +67,25 @@ const dashboardRoute = createRoute({
       });
     }
   },
+  component: AppShell,
+});
+
+const dashboardRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/',
   component: DashboardPage,
 });
 
-const routeTree = rootRoute.addChildren([loginRoute, dashboardRoute]);
+const settingsRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/settings',
+  component: SettingsPage,
+});
+
+const routeTree = rootRoute.addChildren([
+  loginRoute,
+  protectedLayout.addChildren([dashboardRoute, settingsRoute]),
+]);
 
 export const router = createRouter({
   routeTree,

@@ -1,0 +1,19 @@
+# Frontend build output
+dist/
+.vite/
+
+# Rust build output
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Tauri generated icons (we ship a base set; tauri-icon generates the rest)
+# Comment out next line if you want to commit auto-generated icons.
+# src-tauri/icons/*generated*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local

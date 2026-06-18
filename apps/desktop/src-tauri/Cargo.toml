@@ -1,0 +1,96 @@
+[package]
+name = "focus-tracker-desktop"
+version = "0.0.1"
+description = "Focus Tracker desktop telemetry client (Tauri 2 + Rust)."
+authors = ["Focus Tracker"]
+edition = "2021"
+rust-version = "1.77"
+
+# Tauri's recommended dual-crate layout:
+#   * `main.rs`  — thin binary entry that calls into the lib.
+#   * `lib.rs`   — application logic; also compiled as `cdylib` for mobile
+#                  targets in the future.
+[lib]
+name = "focus_tracker_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# ---------------------------------------------------------------------------
+#  Tauri core + plugins
+# ---------------------------------------------------------------------------
+# `tray-icon` is required for the system-tray menu (DesktopApp.md §6); the
+# default features pull in the rest of the v2 baseline.
+tauri = { version = "2", features = ["tray-icon"] }
+# Lets the user open external URLs (e.g. the web app dashboard) from the
+# Tauri frontend via @tauri-apps/plugin-opener.
+tauri-plugin-opener = "2"
+
+# ---------------------------------------------------------------------------
+#  Persistence + secrets
+# ---------------------------------------------------------------------------
+# Cross-platform user-directory lookup (config dir, data dir).
+directories = "5"
+# OS keychain — Windows Credential Manager / macOS Keychain / Secret Service.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+
+# ---------------------------------------------------------------------------
+#  HTTP, async, serialisation, IDs
+# ---------------------------------------------------------------------------
+# Async runtime. `rt-multi-thread` for tokio::spawn; `time` for delays.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+# HTTP client. `rustls-tls` to avoid the openssl native-tls dep on Windows.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# UUIDv4 for device IDs (DesktopApp.md §10 — generated once at install).
+uuid = { version = "1", features = ["v4", "serde"] }
+# Friendly error types that auto-implement Display/Error and integrate
+# cleanly with the Tauri command bridge.
+thiserror = "1"
+# Logging — tracing scales better than `log` if we ever want structured
+# spans, but stays no-frills today.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Optional but useful: hostname for the default device label.
+hostname = "0.4"
+
+# ---------------------------------------------------------------------------
+#  Capture loop deps (slice 5)
+# ---------------------------------------------------------------------------
+# Foreground-window detection. Cross-platform: Win32 / NSWorkspace / X11.
+active-win-pos-rs = "0.8"
+# OS-level idle detection (no-input duration). Cross-platform.
+user-idle = "0.6"
+# ISO-8601 / RFC3339 timestamps. Way lighter than chrono.
+time = { version = "0.3", features = ["serde-well-known", "macros", "formatting", "parsing"] }
+# Client-side event IDs. ULID > UUIDv4 here because they're timestamp-sortable
+# and shorter; matches PROJECT.md §7.8 (ULID/UUIDv7).
+ulid = { version = "1", features = ["serde"] }
+# `async fn` in traits is stable in Rust ≥ 1.75 BUT the resulting traits are
+# not object-safe (can't be put behind `Arc<dyn ...>`). The flusher needs
+# trait objects so it can swap a real uploader for a fake in tests; the
+# `async-trait` macro fixes that by boxing the returned future.
+async-trait = "0.1"
+
+[dev-dependencies]
+# Temporary dirs for outbox file-IO tests.
+tempfile = "3"
+
+[features]
+# Used by Tauri's debug bundle. No-op for our code.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+# ---------------------------------------------------------------------------
+#  Release tuning — keep the binary small (DesktopApp.md §2 goal: ~10 MB).
+# ---------------------------------------------------------------------------
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

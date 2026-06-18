@@ -222,6 +222,13 @@ model PairingCode {
   claimedByUserId String?
   claimedByUser   User?     @relation(fields: [claimedByUserId], references: [id], onDelete: SetNull)
   claimedAt       DateTime?
+  /// Plaintext API key, populated atomically when the user claims the code,
+  /// returned to the polling device exactly once, then the row is deleted.
+  /// Lives in the DB for a few seconds at most (claim → next 3s poll). This
+  /// is the only place in the schema where raw secret material is stored —
+  /// see Auth.md §5.1 step 4 for the lifecycle. Hash of the same value
+  /// lives permanently in `ApiKey.tokenHash`.
+  mintedApiKey    String?
   createdAt       DateTime  @default(now())
   expiresAt       DateTime              // createdAt + 5 min
 

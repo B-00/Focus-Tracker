@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { ApiKeyAuthGuard } from './api-key-auth.guard';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
@@ -33,7 +34,14 @@ import { MeController } from '../users/me.controller';
     }),
   ],
   controllers: [AuthController, MeController],
-  providers: [AuthService, TokenService, PasswordService, JwtAuthGuard],
-  exports: [AuthService, TokenService, PasswordService, JwtAuthGuard, JwtModule],
+  providers: [AuthService, TokenService, PasswordService, JwtAuthGuard, ApiKeyAuthGuard],
+  exports: [
+    AuthService,
+    TokenService,
+    PasswordService,
+    JwtAuthGuard,
+    ApiKeyAuthGuard,
+    JwtModule,
+  ],
 })
 export class AuthModule {}

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Focus Tracker",
+  "version": "0.0.1",
+  "identifier": "app.focustracker.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm vite",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm vite:build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Focus Tracker",
+        "width": 480,
+        "height": 640,
+        "minWidth": 360,
+        "minHeight": 480,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "visible": true,
+        "skipTaskbar": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:*"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    },
+    "category": "Productivity",
+    "shortDescription": "Focus Tracker desktop telemetry client",
+    "longDescription": "Captures foreground application focus on this device and sends it to the Focus Tracker API. Companion to the Focus Tracker web app and browser extension."
+  },
+  "plugins": {}
+}
