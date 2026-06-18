@@ -8,7 +8,7 @@ use crate::{
     config::{config_path, DesktopConfig},
     daemon::Daemon,
     errors::{AppError, AppResult},
-    events::PairingCodePollResponse,
+    events::{EventKind, PairingCodePollResponse},
     keychain,
     pairing::{PairingClient, PairingHandle},
 };
@@ -256,6 +256,76 @@ pub fn set_track_titles(enabled: bool, state: State<'_, AppState>) -> AppResult<
         cfg.save()?;
     }
     snapshot(&state)
+}
+
+/// One row of the desktop "Recent activity" live feed. Flattened from
+/// `StoredEvent` so the frontend doesn't have to parse heterogeneous JSON
+/// `target` shapes itself.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentEventForFrontend {
+    pub id: String,
+    pub kind: EventKind,
+    /// `appName` for desktop focus_change; `domain` for browser focus_change;
+    /// `null` for heartbeat / session_start / session_end.
+    pub app: Option<String>,
+    /// Window title for desktop focus_change (when track_titles is on),
+    /// page title for browser focus_change. `null` otherwise.
+    pub title: Option<String>,
+    pub started_at: String,
+    pub duration_ms: Option<u64>,
+}
+
+/// Returns up to `RECENT_RING_CAPACITY` of the most recent events the
+/// daemon has captured, **newest first**, for the desktop UI live feed.
+/// Always succeeds; returns an empty list if the daemon hasn't captured
+/// anything yet.
+#[tauri::command]
+pub fn get_recent_events(state: State<'_, AppState>) -> AppResult<Vec<RecentEventForFrontend>> {
+    let mut events = state.daemon.recent_events();
+    // Reverse so newest is first. `Outbox::recent_events()` returns the
+    // ring in insertion order (oldest → newest).
+    events.reverse();
+    Ok(events.into_iter().map(flatten_event).collect())
+}
+
+fn flatten_event(e: crate::events::StoredEvent) -> RecentEventForFrontend {
+    let (app, title) = extract_app_and_title(&e);
+    RecentEventForFrontend {
+        id: e.id,
+        kind: e.kind,
+        app,
+        title,
+        // RFC3339 is the wire format; the React side already speaks it via
+        // `relativeTime()`. Fallback to empty on the (impossible) case the
+        // format call fails — better than panicking inside a Tauri command.
+        started_at: e.started_at.format(&Rfc3339).unwrap_or_default(),
+        duration_ms: e.duration_ms,
+    }
+}
+
+fn extract_app_and_title(e: &crate::events::StoredEvent) -> (Option<String>, Option<String>) {
+    if e.kind != EventKind::FocusChange {
+        return (None, None);
+    }
+    let obj = match e.target.as_object() {
+        Some(o) => o,
+        None => return (None, None),
+    };
+    // desktop: { appName, appBundleId?, windowTitle? }
+    // browser: { domain, url?, title? }
+    let app = obj
+        .get("appName")
+        .or_else(|| obj.get("domain"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let title = obj
+        .get("windowTitle")
+        .or_else(|| obj.get("title"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    (app, title)
 }
 
 /// Opens the configured API base URL in the user's default browser. We

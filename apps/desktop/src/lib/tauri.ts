@@ -106,3 +106,30 @@ export async function setTrackTitles(enabled: boolean): Promise<DesktopState> {
 export async function openDashboard(): Promise<void> {
   return invoke<void>('open_dashboard');
 }
+
+/// One row of the "Recent activity" live feed shown under the Capture
+/// section of the Paired view. Flattened from the wire `StoredEvent`
+/// shape; mirrors `RecentEventForFrontend` in commands.rs.
+export interface RecentEvent {
+  id: string;
+  kind: 'focus_change' | 'heartbeat' | 'session_start' | 'session_end';
+  /// `appName` for desktop / `domain` for browser focus_change events.
+  /// `null` for non-focus events (heartbeats and session lifecycle).
+  app: string | null;
+  /// Window title (desktop) / page title (browser). `null` when the
+  /// privacy toggle is off or the event has no title.
+  title: string | null;
+  /// RFC3339 timestamp of when the foreground window switched to this
+  /// target (or when the lifecycle event fired).
+  startedAt: string;
+  /// Bounded duration in ms. `null` for events that are pure timestamps
+  /// (heartbeats, session_start, session_end).
+  durationMs: number | null;
+}
+
+/// Returns up to 25 of the most recent events the daemon has captured,
+/// newest first. Independent of flush state — events stay in the buffer
+/// even after the outbox flushes them to the API.
+export async function getRecentEvents(): Promise<RecentEvent[]> {
+  return invoke<RecentEvent[]>('get_recent_events');
+}

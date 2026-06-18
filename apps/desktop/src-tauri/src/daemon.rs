@@ -97,6 +97,12 @@ impl Daemon {
         self.flush_signals.queue_depth.load(Ordering::Relaxed)
     }
 
+    /// Snapshot of the outbox's recent-activity ring. Used by the
+    /// `get_recent_events` Tauri command for the live UI feed.
+    pub fn recent_events(&self) -> Vec<crate::events::StoredEvent> {
+        self.outbox.recent_events()
+    }
+
     pub fn last_flush_at(&self) -> Option<OffsetDateTime> {
         *self
             .flush_signals

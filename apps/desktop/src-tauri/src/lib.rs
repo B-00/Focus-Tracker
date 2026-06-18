@@ -103,6 +103,7 @@ pub fn run() {
             commands::set_paused,
             commands::set_track_titles,
             commands::open_dashboard,
+            commands::get_recent_events,
         ])
         .build(tauri::generate_context!());
 

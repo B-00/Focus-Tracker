@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  getRecentEvents,
   getState,
   openDashboard,
   setPaused,
   setTrackTitles,
   unpairLocal,
   type DesktopState,
+  type RecentEvent,
 } from '../lib/tauri';
 import { relativeTime } from '../lib/relative-time';
 
@@ -115,6 +117,8 @@ export function Paired({ state: initial }: PairedProps) {
               : 'App names only — titles dropped at the source'
           }
         />
+
+        <RecentActivity daemonRunning={state.daemonRunning} />
       </fieldset>
 
       <div className="flex gap-2">
@@ -129,6 +133,118 @@ export function Paired({ state: initial }: PairedProps) {
       </div>
     </section>
   );
+}
+
+function RecentActivity({ daemonRunning }: { daemonRunning: boolean }) {
+  // Poll faster than getState() since this is the live feed. 2s feels
+  // responsive without burning the bridge — captures are 1s-resolution
+  // upstream so anything tighter would just observe noise.
+  const { data: events = [], isLoading } = useQuery({
+    queryKey: ['desktop-recent-events'],
+    queryFn: getRecentEvents,
+    refetchInterval: 2_000,
+    enabled: daemonRunning,
+  });
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between">
+        <p className="text-[0.65rem] uppercase tracking-wider text-neutral-500">
+          Recent activity
+        </p>
+        <p className="text-[0.6rem] text-neutral-600">
+          last {events.length} of 25
+        </p>
+      </div>
+      <ul
+        className="max-h-64 space-y-0.5 overflow-y-auto rounded border border-neutral-800 bg-neutral-950/60 p-1.5 font-mono text-[0.65rem]"
+        aria-live="polite"
+      >
+        {!daemonRunning && (
+          <li className="px-2 py-2 text-neutral-500">
+            Daemon idle — start by pairing.
+          </li>
+        )}
+        {daemonRunning && isLoading && (
+          <li className="px-2 py-2 text-neutral-500">Loading…</li>
+        )}
+        {daemonRunning && !isLoading && events.length === 0 && (
+          <li className="px-2 py-2 text-neutral-500">
+            No events yet. Switch windows or wait a minute for a heartbeat.
+          </li>
+        )}
+        {events.map((event) => (
+          <EventRow key={event.id} event={event} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function EventRow({ event }: { event: RecentEvent }) {
+  const kindStyle = KIND_STYLES[event.kind];
+  return (
+    <li className="flex items-center gap-2 rounded px-2 py-1 hover:bg-neutral-900/60">
+      <span
+        className={`shrink-0 rounded px-1.5 py-px text-[0.55rem] font-medium uppercase tracking-wider ${kindStyle.badge}`}
+        title={event.kind}
+      >
+        {kindStyle.label}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-neutral-300" title={describeEvent(event)}>
+        {describeEvent(event)}
+      </span>
+      <span className="shrink-0 text-neutral-500">{formatDuration(event.durationMs)}</span>
+      <span
+        className="shrink-0 text-neutral-500"
+        title={new Date(event.startedAt).toLocaleString()}
+      >
+        {relativeTime(event.startedAt)}
+      </span>
+    </li>
+  );
+}
+
+const KIND_STYLES: Record<RecentEvent['kind'], { label: string; badge: string }> = {
+  focus_change: {
+    label: 'focus',
+    badge: 'bg-emerald-950 text-emerald-300',
+  },
+  heartbeat: {
+    label: 'beat',
+    badge: 'bg-neutral-800 text-neutral-400',
+  },
+  session_start: {
+    label: 'start',
+    badge: 'bg-sky-950 text-sky-300',
+  },
+  session_end: {
+    label: 'end',
+    badge: 'bg-amber-950 text-amber-300',
+  },
+};
+
+function describeEvent(event: RecentEvent): string {
+  if (event.kind !== 'focus_change') {
+    return event.kind === 'heartbeat'
+      ? 'daemon alive'
+      : event.kind === 'session_start'
+        ? 'capture started'
+        : 'capture stopped';
+  }
+  if (event.app && event.title) return `${event.app} — ${event.title}`;
+  if (event.app) return event.app;
+  return 'unknown focus target';
+}
+
+function formatDuration(ms: number | null): string {
+  if (ms === null || ms === undefined) return '';
+  if (ms < 1_000) return `${ms}ms`;
+  const s = Math.round(ms / 1_000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const remS = s % 60;
+  return remS === 0 ? `${m}m` : `${m}m${remS}s`;
 }
 
 function StatusDot({ running, paused }: { running: boolean; paused: boolean }) {
@@ -178,6 +294,10 @@ function Toggle({
   title: string;
   subtitle: string;
 }) {
+  // Geometry: track 24x44, knob 20x20, top:2px left:2px → 2px gap on top,
+  // bottom, and the resting (off) side. translate-x-5 = 20px = (track 44
+  // - knob 20 - 2*2 padding) so the knob lands with the same 2px padding
+  // on the right when on. Symmetric and stays fully inside the track.
   return (
     <label className="flex items-center justify-between gap-3">
       <span>
@@ -190,15 +310,13 @@ function Toggle({
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`relative h-5 w-9 shrink-0 rounded-full border transition disabled:opacity-50 ${
-          checked
-            ? 'border-emerald-700 bg-emerald-600/60'
-            : 'border-neutral-700 bg-neutral-800'
+        className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-50 ${
+          checked ? 'bg-emerald-600' : 'bg-neutral-700'
         }`}
       >
         <span
-          className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-neutral-100 transition-transform ${
-            checked ? 'translate-x-[1.125rem]' : 'translate-x-0.5'
+          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-neutral-100 shadow-sm transition-transform ${
+            checked ? 'translate-x-5' : 'translate-x-0'
           }`}
         />
       </button>

@@ -20,8 +20,10 @@ use crate::{
     events::StoredEvent,
 };
 use std::{
+    collections::VecDeque,
     io::Write,
     path::{Path, PathBuf},
+    sync::Mutex as StdMutex,
     time::Duration,
 };
 use time::OffsetDateTime;
@@ -34,21 +36,46 @@ pub const MAX_EVENTS: usize = 100_000;
 /// Max events the API accepts in one POST (PROJECT.md §7.2 / shared/telemetry.ts).
 pub const MAX_BATCH_SIZE: usize = 50;
 
+/// Size of the in-memory "recent activity" ring buffer the daemon exposes
+/// to the desktop UI's live feed. Independent of flush state — events
+/// stay in the ring even after the outbox file drops them post-ack.
+pub const RECENT_RING_CAPACITY: usize = 25;
+
 pub struct Outbox {
     /// `<data_dir>/outbox.jsonl`
     path: PathBuf,
     /// `<data_dir>/outbox.jsonl.tmp` — atomic rename target during rewrite
     tmp_path: PathBuf,
+    /// Serialises all file IO so appends never interleave with rewrites.
     lock: Mutex<()>,
+    /// Bounded FIFO of the last `RECENT_RING_CAPACITY` events appended,
+    /// independent of flush state. Powers the desktop "Recent activity"
+    /// feed. Std mutex (sync) — it's only ever held for microseconds.
+    recent: StdMutex<VecDeque<StoredEvent>>,
 }
 
 impl Outbox {
     pub fn new(path: PathBuf) -> Self {
         let tmp_path = path.with_extension("jsonl.tmp");
+        // Seed the ring from whatever's already in the file so the UI has
+        // *something* to show right after launch (e.g. unsent events from
+        // before the last shutdown). Best-effort; failures are silent.
+        let mut seed = VecDeque::with_capacity(RECENT_RING_CAPACITY);
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            for line in text.lines().filter(|l| !l.is_empty()) {
+                if let Ok(ev) = serde_json::from_str::<StoredEvent>(line) {
+                    if seed.len() == RECENT_RING_CAPACITY {
+                        seed.pop_front();
+                    }
+                    seed.push_back(ev);
+                }
+            }
+        }
         Self {
             path,
             tmp_path,
             lock: Mutex::new(()),
+            recent: StdMutex::new(seed),
         }
     }
 
@@ -56,10 +83,24 @@ impl Outbox {
         &self.path
     }
 
-    /// fsynced append of one event.
+    /// fsynced append of one event. Also pushes a clone into the recent-
+    /// activity ring buffer so the desktop UI can render a live feed
+    /// without re-reading the file.
     pub async fn append(&self, event: &StoredEvent) -> AppResult<()> {
         let _g = self.lock.lock().await;
-        self.append_locked(event)
+        self.append_locked(event)?;
+        // Push to ring AFTER the disk write succeeded — we don't want a
+        // failed flush to surface in the UI as "this event was captured"
+        // when in fact it never hit durable storage.
+        let mut ring = self
+            .recent
+            .lock()
+            .expect("outbox recent ring mutex poisoned");
+        if ring.len() == RECENT_RING_CAPACITY {
+            ring.pop_front();
+        }
+        ring.push_back(event.clone());
+        Ok(())
     }
 
     fn append_locked(&self, event: &StoredEvent) -> AppResult<()> {
@@ -75,6 +116,16 @@ impl Outbox {
         f.write_all(&line)?;
         f.sync_data()?;
         Ok(())
+    }
+
+    /// Returns a snapshot of the recent-activity ring, newest event last
+    /// (same order they were appended). The frontend reverses on render.
+    pub fn recent_events(&self) -> Vec<StoredEvent> {
+        let ring = self
+            .recent
+            .lock()
+            .expect("outbox recent ring mutex poisoned");
+        ring.iter().cloned().collect()
     }
 
     /// Line count. O(n) — we accept the cost; outbox is bounded at 100k.
@@ -403,6 +454,64 @@ mod tests {
         assert_eq!(drained.len(), 2);
         assert_eq!(drained[0].id, "a");
         assert_eq!(drained[1].id, "b");
+    }
+
+    #[tokio::test]
+    async fn recent_ring_starts_empty_and_records_appends() {
+        let (_dir, ob) = fresh();
+        assert!(ob.recent_events().is_empty());
+        ob.append(&make_event("a", datetime!(2026-06-17 21:00:00 UTC)))
+            .await
+            .unwrap();
+        ob.append(&make_event("b", datetime!(2026-06-17 21:00:01 UTC)))
+            .await
+            .unwrap();
+        let r = ob.recent_events();
+        assert_eq!(r.len(), 2);
+        assert_eq!(r[0].id, "a"); // oldest first; UI reverses
+        assert_eq!(r[1].id, "b");
+    }
+
+    #[tokio::test]
+    async fn recent_ring_caps_at_capacity_keeping_newest() {
+        let (_dir, ob) = fresh();
+        for i in 0..(RECENT_RING_CAPACITY + 5) {
+            ob.append(&make_event(
+                &format!("e{i}"),
+                datetime!(2026-06-17 21:00:00 UTC),
+            ))
+            .await
+            .unwrap();
+        }
+        let r = ob.recent_events();
+        assert_eq!(r.len(), RECENT_RING_CAPACITY);
+        // Oldest events should be evicted; we should see e5..e29.
+        assert_eq!(r.first().unwrap().id, "e5");
+        assert_eq!(r.last().unwrap().id, format!("e{}", RECENT_RING_CAPACITY + 4));
+    }
+
+    #[tokio::test]
+    async fn recent_ring_seeded_from_existing_file() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("outbox.jsonl");
+        // First Outbox: write some events.
+        {
+            let ob = Outbox::new(path.clone());
+            for i in 0..3 {
+                ob.append(&make_event(
+                    &format!("seed{i}"),
+                    datetime!(2026-06-17 21:00:00 UTC),
+                ))
+                .await
+                .unwrap();
+            }
+        }
+        // Second Outbox over the same file should see the events in its
+        // ring without us having to append anything new.
+        let ob2 = Outbox::new(path);
+        let r = ob2.recent_events();
+        assert_eq!(r.len(), 3);
+        assert_eq!(r.first().unwrap().id, "seed0");
     }
 
     #[tokio::test]
