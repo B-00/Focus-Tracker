@@ -22,6 +22,17 @@ export interface DesktopState {
   label: string;
   /// Last reported by the daemon — null on a fresh install.
   lastFlushAt: string | null;
+  /// True iff the capture + flush + heartbeat tokio tasks are running.
+  /// Implies `paired === true`. False during the brief window between
+  /// pair-claim and daemon spawn, and after a 401/403-induced shutdown.
+  daemonRunning: boolean;
+  /// Capture loop currently paused (via Settings or tray). Persisted.
+  paused: boolean;
+  /// Privacy toggle: when false, `focus_change` events ship without
+  /// `windowTitle`. Default true. Persisted (DesktopApp.md §11).
+  trackTitles: boolean;
+  /// Number of events currently sitting in the outbox waiting to flush.
+  queueDepth: number;
 }
 
 /// Returned by `start_pairing` — opaque handle the React side polls against.
@@ -75,4 +86,23 @@ export async function cancelPairing(): Promise<void> {
 /// they should also revoke via the web app.
 export async function unpairLocal(): Promise<DesktopState> {
   return invoke<DesktopState>('unpair_local');
+}
+
+/// Toggles the capture loop. When paused, no new focus_change events are
+/// recorded; any in-flight event is finalised. Persisted to disk.
+export async function setPaused(paused: boolean): Promise<DesktopState> {
+  return invoke<DesktopState>('set_paused', { paused });
+}
+
+/// Toggles the privacy "Track window titles" setting (default ON).
+/// When off, focus_change events ship without `windowTitle`. Persisted.
+export async function setTrackTitles(enabled: boolean): Promise<DesktopState> {
+  return invoke<DesktopState>('set_track_titles', { enabled });
+}
+
+/// Opens the configured dashboard URL in the user's default browser. In
+/// dev, the Rust side rewrites `:3000` → `:5173` so this lands on the Vite
+/// dev server for the web app.
+export async function openDashboard(): Promise<void> {
+  return invoke<void>('open_dashboard');
 }

@@ -19,6 +19,7 @@
     "seed-user": "pnpm cli seed-user",
     "reset-password": "pnpm cli reset-password",
     "list-users": "pnpm cli list-users",
+    "post-telemetry": "pnpm cli post-telemetry",
     "postinstall": "prisma generate"
   },
   "dependencies": {
