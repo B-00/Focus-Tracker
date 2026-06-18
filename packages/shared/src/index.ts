@@ -86,6 +86,35 @@ export type {
 } from './auth.js';
 
 // ---------------------------------------------------------------------------
+//  Activity (Activity.md §6)
+// ---------------------------------------------------------------------------
+export {
+  ACTIVITY_RANGES,
+  ACTIVITY_BUCKET_GRAINS,
+  ACTIVITY_TOP_N,
+  ACTIVITY_RECENT_DEFAULT_LIMIT,
+  ACTIVITY_RECENT_MAX_LIMIT,
+  activitySummaryQuerySchema,
+  activityTargetTotalSchema,
+  activityBucketSchema,
+  activitySummaryResponseSchema,
+  activityRecentQuerySchema,
+  activityRecentEventSchema,
+  activityRecentResponseSchema,
+} from './activity.js';
+export type {
+  ActivityRange,
+  ActivityBucketGrain,
+  ActivitySummaryQuery,
+  ActivityTargetTotal,
+  ActivityBucket,
+  ActivitySummaryResponse,
+  ActivityRecentQuery,
+  ActivityRecentEvent,
+  ActivityRecentResponse,
+} from './activity.js';
+
+// ---------------------------------------------------------------------------
 //  Pairing + Devices (Auth.md §5)
 // ---------------------------------------------------------------------------
 export {
