@@ -104,24 +104,36 @@ interface RowProps {
 }
 
 function Row({ name, durationMs, shareOfTotal, color, compact }: RowProps) {
-  const barWidth = compact ? 'w-10' : 'w-14';
-  const durationWidth = compact ? 'w-14' : 'w-16';
+  // Grid layout so we can pin the bar to "fill whatever's between name and
+  // duration":
+  //   col 1: auto              — color dot
+  //   col 2: minmax(0,content) — name; takes its natural width but can
+  //                              shrink to 0 (with `truncate`) on tight rows
+  //   col 3: minmax(?, 1fr)    — bar; eats the gap so the row never has dead
+  //                              space between name and duration
+  //   col 4: fixed             — duration; mono + tabular-nums + fixed width
+  //                              so bars all end at the same x-coord across
+  //                              rows regardless of "1h 57m" vs "8m 52s"
+  const gridCols = compact
+    ? 'grid-cols-[auto_minmax(0,max-content)_minmax(2rem,1fr)_3.5rem]'
+    : 'grid-cols-[auto_minmax(0,max-content)_minmax(2.5rem,1fr)_4rem]';
   return (
-    <li className="flex items-center gap-2.5 text-sm">
+    <li className={`grid items-center gap-3 text-sm ${gridCols}`}>
       <span
-        className="h-2 w-2 shrink-0 rounded-full"
+        className="h-2 w-2 rounded-full"
         style={{ background: color }}
         aria-hidden
       />
       <span
-        className="flex-1 truncate text-neutral-200"
+        className="truncate text-neutral-200"
         title={`${name} — ${(shareOfTotal * 100).toFixed(1)}%`}
       >
         {name}
       </span>
-      {/* Mini share-of-total progress bar — same hue as the donut segment. */}
+      {/* Share-of-total progress bar — fills the inter-column gap, same hue
+          as the donut segment. */}
       <span
-        className={`relative h-1 overflow-hidden rounded-full bg-neutral-800 ${barWidth}`}
+        className="relative h-1.5 overflow-hidden rounded-full bg-neutral-800"
         aria-hidden
       >
         <span
@@ -129,9 +141,7 @@ function Row({ name, durationMs, shareOfTotal, color, compact }: RowProps) {
           style={{ width: `${shareOfTotal * 100}%`, background: color }}
         />
       </span>
-      <span
-        className={`shrink-0 text-right font-mono tabular-nums text-neutral-300 ${durationWidth}`}
-      >
+      <span className="text-right font-mono tabular-nums text-neutral-300">
         {compact ? formatDurationCompact(durationMs) : formatDuration(durationMs)}
       </span>
     </li>
