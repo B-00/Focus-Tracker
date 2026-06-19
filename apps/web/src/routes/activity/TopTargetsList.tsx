@@ -104,21 +104,23 @@ interface RowProps {
 }
 
 function Row({ name, durationMs, shareOfTotal, color, compact }: RowProps) {
-  // Grid layout so we can pin the bar to "fill whatever's between name and
-  // duration":
-  //   col 1: auto              — color dot
-  //   col 2: minmax(0,content) — name; takes its natural width but can
-  //                              shrink to 0 (with `truncate`) on tight rows
-  //   col 3: minmax(?, 1fr)    — bar; eats the gap so the row never has dead
-  //                              space between name and duration
-  //   col 4: fixed             — duration; mono + tabular-nums + fixed width
-  //                              so bars all end at the same x-coord across
-  //                              rows regardless of "1h 57m" vs "8m 52s"
-  const gridCols = compact
-    ? 'grid-cols-[auto_minmax(0,max-content)_minmax(2rem,1fr)_3.5rem]'
-    : 'grid-cols-[auto_minmax(0,max-content)_minmax(2.5rem,1fr)_4rem]';
+  // Grid layout: two equal-width "boxes" for name + bar side by side, with
+  // dot and duration pinned to the edges.
+  //   col 1: auto             — color dot
+  //   col 2: minmax(0, 1fr)   — name "box"; left-aligned text, truncates if
+  //                             the row gets squeezed
+  //   col 3: minmax(0, 1fr)   — bar "box"; gray track fills the box, colored
+  //                             fill left-aligned and sized to share-of-total
+  //   col 4: fixed            — duration; mono + tabular-nums + fixed width
+  //                             so every row's duration starts at the same x
+  const durationWidth = compact ? '3.5rem' : '4rem';
   return (
-    <li className={`grid items-center gap-3 text-sm ${gridCols}`}>
+    <li
+      className="grid items-center gap-3 text-sm"
+      style={{
+        gridTemplateColumns: `auto minmax(0, 1fr) minmax(0, 1fr) ${durationWidth}`,
+      }}
+    >
       <span
         className="h-2 w-2 rounded-full"
         style={{ background: color }}
@@ -130,17 +132,18 @@ function Row({ name, durationMs, shareOfTotal, color, compact }: RowProps) {
       >
         {name}
       </span>
-      {/* Share-of-total progress bar — fills the inter-column gap, same hue
-          as the donut segment. */}
-      <span
-        className="relative h-1.5 overflow-hidden rounded-full bg-neutral-800"
+      {/* Share-of-total progress bar. Outer <div> forces block-level so it
+          fills the grid cell predictably (inline <span> was being treated as
+          shrink-to-fit by some browsers even inside a grid container). */}
+      <div
+        className="relative h-1.5 w-full overflow-hidden rounded-full bg-neutral-800"
         aria-hidden
       >
-        <span
+        <div
           className="absolute inset-y-0 left-0 rounded-full"
           style={{ width: `${shareOfTotal * 100}%`, background: color }}
         />
-      </span>
+      </div>
       <span className="text-right font-mono tabular-nums text-neutral-300">
         {compact ? formatDurationCompact(durationMs) : formatDuration(durationMs)}
       </span>
