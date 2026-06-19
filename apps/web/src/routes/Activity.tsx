@@ -108,7 +108,9 @@ export function ActivityPage() {
             grain={summaryQuery.data.range.bucketGrain}
             timezone={summaryQuery.data.range.timezone}
           />
-          <div className="grid gap-5 sm:grid-cols-2">
+          {/* Stacked: Top Apps over Top Sites. Each section has its own
+              donut + ranked list (see TopTargetsList). */}
+          <div className="flex flex-col gap-5">
             <TopTargetsList
               title="Top apps"
               kind="apps"

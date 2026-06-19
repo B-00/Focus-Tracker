@@ -59,20 +59,22 @@ export function TodayActivityWidget() {
 
           <MiniBar buckets={data.buckets} />
 
-          {/* Top 3 apps + top 3 sites side-by-side, reusing the same
-              component the page uses with a `limit` cap. */}
-          <div className="grid gap-3 sm:grid-cols-2">
+          {/* Top apps stacked over top sites, compact donut variant so the
+              widget stays short. Same component as the /activity page. */}
+          <div className="flex flex-col gap-3">
             <TopTargetsList
               title="Top apps"
               kind="apps"
               items={data.topApps}
               limit={TOP_N}
+              variant="compact"
             />
             <TopTargetsList
               title="Top sites"
               kind="sites"
               items={data.topSites}
               limit={TOP_N}
+              variant="compact"
             />
           </div>
         </div>
