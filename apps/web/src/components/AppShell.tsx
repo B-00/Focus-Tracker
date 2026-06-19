@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
+import { useTimezoneAutoDetect } from '../hooks/useTimezoneAutoDetect';
 import { logout as apiLogout, logoutAll as apiLogoutAll } from '../lib/auth-api';
 import { tokenStorage } from '../lib/token-storage';
 import { useAuthStore } from '../stores/auth-store';
@@ -17,6 +18,10 @@ import { useAuthStore } from '../stores/auth-store';
 
 export function AppShell(): ReactNode {
   const user = useAuthStore((s) => s.user);
+  // Silent backfill of the user's IANA timezone from the browser on every
+  // authenticated session. See Settings.md §4.1.1 and useTimezoneAutoDetect
+  // for the policy (no-op once `timezoneOverridden = true`).
+  useTimezoneAutoDetect();
   return (
     <div className="min-h-screen text-neutral-100">
       <AppHeader email={user?.email ?? null} />

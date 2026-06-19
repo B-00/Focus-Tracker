@@ -156,9 +156,10 @@ function pickAxisLabels(
 function formatTick(iso: string, grain: ActivityBucketGrain, tz: string): string {
   const d = new Date(iso);
   if (grain === 'hour') {
+    // 12h with explicit AM/PM, no minutes — keeps axis compact (e.g. "3 PM").
     return new Intl.DateTimeFormat(undefined, {
-      hour: '2-digit',
-      hour12: false,
+      hour: 'numeric',
+      hour12: true,
       timeZone: tz,
     }).format(d);
   }
@@ -172,12 +173,13 @@ function formatTick(iso: string, grain: ActivityBucketGrain, tz: string): string
 function formatBucketStart(iso: string, grain: ActivityBucketGrain, tz: string): string {
   const d = new Date(iso);
   if (grain === 'hour') {
+    // Hover tooltip: full date + 12h time with AM/PM (e.g. "Jun 18, 10:00 PM").
     return new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
-      hour: '2-digit',
+      hour: 'numeric',
       minute: '2-digit',
-      hour12: false,
+      hour12: true,
       timeZone: tz,
     }).format(d);
   }

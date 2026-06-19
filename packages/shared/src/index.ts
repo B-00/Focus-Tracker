@@ -115,6 +115,18 @@ export type {
 } from './activity.js';
 
 // ---------------------------------------------------------------------------
+//  Profile (Settings.md §4.1 + §6.3)
+// ---------------------------------------------------------------------------
+export {
+  meProfileResponseSchema,
+  updateMeProfileRequestSchema,
+} from './me.js';
+export type {
+  MeProfileResponse,
+  UpdateMeProfileRequest,
+} from './me.js';
+
+// ---------------------------------------------------------------------------
 //  Pairing + Devices (Auth.md §5)
 // ---------------------------------------------------------------------------
 export {
