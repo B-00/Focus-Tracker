@@ -223,13 +223,16 @@ function Donut({ items, denom, centerTotalMs, size, countLabel }: DonutProps) {
         role="img"
         aria-label={`Top ${items.length} ${countLabel}, total ${formatDurationCompact(centerTotalMs)}`}
       >
-        {/* Track ring — visible on empty / sub-100% donuts. */}
+        {/* Track ring — visible portion represents "Other" (kind total
+            minus the visible top-N segments) when the colored segments
+            don't fully wrap the circle. Violet so it's clearly distinct
+            from the palette colors and reads as a secondary band. */}
         <circle
           cx={cx}
           cy={cy}
           r={radius}
           fill="none"
-          stroke="rgba(38, 38, 38, 0.55)"
+          stroke="rgba(139, 92, 246, 0.6)"
           strokeWidth={strokeWidth}
         />
         {/* Segments — rotated -90° so the first one starts at 12 o'clock. */}
