@@ -22,22 +22,15 @@ interface TopTargetsListProps {
 }
 
 // Tailwind doesn't propagate dynamic class names into SVG `stroke` attrs,
-// so the palette ships as raw hex values. Tinted per `kind` to reinforce
-// the "apps = green family, sites = blue/purple family" convention already
-// used in the hourly breakdown legend.
-const APPS_PALETTE = [
-  '#34d399', // emerald-400
-  '#2dd4bf', // teal-400
-  '#a3e635', // lime-400
-  '#16a34a', // green-600
-  '#22d3ee', // cyan-400
-] as const;
-const SITES_PALETTE = [
-  '#38bdf8', // sky-400
-  '#3b82f6', // blue-500
-  '#06b6d4', // cyan-500
-  '#818cf8', // indigo-400
-  '#a78bfa', // violet-400
+// so the palette ships as raw hex values. Shared between Top Apps and Top
+// Sites — color identifies rank, not kind. The `kind` distinction lives in
+// the section title and the "desktop / browser" badge in the header.
+const PALETTE = [
+  '#f75590', // pink
+  '#2191fb', // blue
+  '#fbd87f', // yellow
+  '#b5f8fe', // light cyan
+  '#10ffcb', // aqua
 ] as const;
 
 export function TopTargetsList({
@@ -48,7 +41,6 @@ export function TopTargetsList({
   variant = 'full',
 }: TopTargetsListProps) {
   const shown = limit ? items.slice(0, limit) : items;
-  const palette = kind === 'apps' ? APPS_PALETTE : SITES_PALETTE;
   const totalMs = shown.reduce((acc, row) => acc + row.durationMs, 0);
 
   const isCompact = variant === 'compact';
@@ -73,14 +65,13 @@ export function TopTargetsList({
         <div className="flex items-center gap-4">
           <Donut
             items={shown}
-            palette={palette}
             totalMs={totalMs}
             size={isCompact ? 76 : 108}
             countLabel={kind}
           />
           <ol className="flex-1 space-y-1.5">
             {shown.map((row, i) => {
-              const color = palette[i % palette.length];
+              const color = PALETTE[i % PALETTE.length];
               const shareOfTotal = totalMs === 0 ? 0 : row.durationMs / totalMs;
               return (
                 <Row
@@ -153,13 +144,12 @@ function Row({ name, durationMs, shareOfTotal, color, compact }: RowProps) {
 
 interface DonutProps {
   items: ActivityTargetTotal[];
-  palette: readonly string[];
   totalMs: number;
   size: number;
   countLabel: 'apps' | 'sites';
 }
 
-function Donut({ items, palette, totalMs, size, countLabel }: DonutProps) {
+function Donut({ items, totalMs, size, countLabel }: DonutProps) {
   // SVG geometry — `pathLength={100}` normalises the stroke so we can use
   // percentages as raw 0..100 numbers in `strokeDasharray`.
   const radius = size * 0.42;
@@ -177,7 +167,7 @@ function Donut({ items, palette, totalMs, size, countLabel }: DonutProps) {
       key: item.target,
       pct,
       offset,
-      color: palette[i % palette.length],
+      color: PALETTE[i % PALETTE.length],
     };
   });
 
