@@ -204,7 +204,7 @@ function OtherLegendRow({ gridTemplateColumns }: { gridTemplateColumns: string }
         style={{ background: OTHER_COLOR }}
         aria-hidden
       />
-      <span className="italic text-neutral-500">Other</span>
+      <span className="text-neutral-200">Other</span>
       {/* Empty bar + duration cells so the dot column still lines up
           with the rows above. */}
       <span />
