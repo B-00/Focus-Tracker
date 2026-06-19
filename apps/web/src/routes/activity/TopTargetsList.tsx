@@ -42,6 +42,11 @@ const PALETTE = [
   '#10ffcb', // aqua
 ] as const;
 
+/// Color used for both the donut track ring and the "Other" legend dot at
+/// the bottom of the list. Sharing the value here is how the legend works
+/// as a key — same color in two places links back to the same concept.
+const OTHER_COLOR = 'rgba(181, 248, 254, 0.6)';
+
 export function TopTargetsList({
   title,
   kind,
@@ -51,16 +56,22 @@ export function TopTargetsList({
   variant = 'full',
 }: TopTargetsListProps) {
   const shown = limit ? items.slice(0, limit) : items;
+  const shownSum = shown.reduce((acc, row) => acc + row.durationMs, 0);
   // Denominator for both segment and bar percentages. Falls back to the
   // sum of the visible rows only when the API reports zero total — which
   // shouldn't happen alongside non-empty `items`, but guards against
   // divide-by-zero either way.
-  const denom = totalMsForKind > 0
-    ? totalMsForKind
-    : shown.reduce((acc, row) => acc + row.durationMs, 0);
+  const denom = totalMsForKind > 0 ? totalMsForKind : shownSum;
+  // Whatever time is in the kind but not represented by a visible row.
+  // Drives both the donut's "other" track band visibility AND the
+  // bottom-of-list legend entry below.
+  const otherMs = Math.max(0, denom - shownSum);
+  const hasOther = otherMs > 0;
 
   const isCompact = variant === 'compact';
   const padding = isCompact ? 'p-3' : 'p-4';
+  const durationWidth = isCompact ? '3.5rem' : '4rem';
+  const gridTemplateColumns = `auto minmax(0, 1fr) minmax(0, 1fr) ${durationWidth}`;
 
   return (
     <section className={`rounded-lg border border-neutral-800 bg-neutral-900/40 ${padding}`}>
@@ -97,10 +108,14 @@ export function TopTargetsList({
                   durationMs={row.durationMs}
                   shareOfTotal={shareOfTotal}
                   color={color}
+                  gridTemplateColumns={gridTemplateColumns}
                   compact={isCompact}
                 />
               );
             })}
+            {hasOther && (
+              <OtherLegendRow gridTemplateColumns={gridTemplateColumns} />
+            )}
           </ol>
         </div>
       )}
@@ -117,26 +132,27 @@ interface RowProps {
   durationMs: number;
   shareOfTotal: number; // 0..1, share of the visible total
   color: string;
+  /// Shared between Row and OtherLegendRow so columns line up exactly.
+  ///   col 1: auto             — color dot
+  ///   col 2: minmax(0, 1fr)   — name "box"; left-aligned, truncates
+  ///   col 3: minmax(0, 1fr)   — bar "box"; gray track fills the box
+  ///   col 4: fixed            — duration; mono + tabular-nums fixed width
+  gridTemplateColumns: string;
   compact: boolean;
 }
 
-function Row({ name, durationMs, shareOfTotal, color, compact }: RowProps) {
-  // Grid layout: two equal-width "boxes" for name + bar side by side, with
-  // dot and duration pinned to the edges.
-  //   col 1: auto             — color dot
-  //   col 2: minmax(0, 1fr)   — name "box"; left-aligned text, truncates if
-  //                             the row gets squeezed
-  //   col 3: minmax(0, 1fr)   — bar "box"; gray track fills the box, colored
-  //                             fill left-aligned and sized to share-of-total
-  //   col 4: fixed            — duration; mono + tabular-nums + fixed width
-  //                             so every row's duration starts at the same x
-  const durationWidth = compact ? '3.5rem' : '4rem';
+function Row({
+  name,
+  durationMs,
+  shareOfTotal,
+  color,
+  gridTemplateColumns,
+  compact,
+}: RowProps) {
   return (
     <li
       className="grid items-center gap-3 text-sm"
-      style={{
-        gridTemplateColumns: `auto minmax(0, 1fr) minmax(0, 1fr) ${durationWidth}`,
-      }}
+      style={{ gridTemplateColumns }}
     >
       <span
         className="h-2 w-2 rounded-full"
@@ -164,6 +180,35 @@ function Row({ name, durationMs, shareOfTotal, color, compact }: RowProps) {
       <span className="text-right font-mono tabular-nums text-neutral-300">
         {compact ? formatDurationCompact(durationMs) : formatDuration(durationMs)}
       </span>
+    </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+//  Other legend row
+// ---------------------------------------------------------------------------
+
+/// Sits at the bottom of the list whenever the visible top-N doesn't
+/// cover the whole kind. Same dot+name layout as a regular row so the
+/// dot column lines up perfectly, but the bar and duration cells stay
+/// empty — it's a legend entry, not a data row.
+function OtherLegendRow({ gridTemplateColumns }: { gridTemplateColumns: string }) {
+  return (
+    <li
+      className="grid items-center gap-3 text-sm"
+      style={{ gridTemplateColumns }}
+      aria-label="Legend: dark portion of the ring represents apps and sites not in the top list"
+    >
+      <span
+        className="h-2 w-2 rounded-full"
+        style={{ background: OTHER_COLOR }}
+        aria-hidden
+      />
+      <span className="italic text-neutral-500">Other</span>
+      {/* Empty bar + duration cells so the dot column still lines up
+          with the rows above. */}
+      <span />
+      <span />
     </li>
   );
 }
@@ -225,15 +270,15 @@ function Donut({ items, denom, centerTotalMs, size, countLabel }: DonutProps) {
       >
         {/* Track ring — visible portion represents "Other" (kind total
             minus the visible top-N segments) when the colored segments
-            don't fully wrap the circle. Light cyan at reduced opacity so
-            it reads as a soft background band, clearly distinct from the
-            saturated palette segments. */}
+            don't fully wrap the circle. Shares the `OTHER_COLOR` constant
+            with the bottom-of-list legend dot so the two readouts are
+            literally the same color. */}
         <circle
           cx={cx}
           cy={cy}
           r={radius}
           fill="none"
-          stroke="rgba(181, 248, 254, 0.6)"
+          stroke={OTHER_COLOR}
           strokeWidth={strokeWidth}
         />
         {/* Segments — rotated -90° so the first one starts at 12 o'clock. */}
