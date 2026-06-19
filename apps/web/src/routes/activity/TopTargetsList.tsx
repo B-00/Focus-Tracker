@@ -13,6 +13,15 @@ interface TopTargetsListProps {
   /// "apps" | "sites" — drives empty-state copy and the color palette.
   kind: 'apps' | 'sites';
   items: ActivityTargetTotal[];
+  /// The API's true total for this `kind` over the active range —
+  /// `summary.totals.apps` or `summary.totals.sites`. Used as the donut
+  /// center value AND the denominator for segment + bar percentages so
+  /// the donut, the row bars, and the SummaryBand all agree on what
+  /// "total" means. When the top-N list doesn't account for the whole
+  /// kind (e.g. apps ranked 6+ contributing some time), the leftover
+  /// shows up as the dark portion of the ring — visually honest about
+  /// "Other".
+  totalMsForKind: number;
   /// Slice to the first `limit` rows (used by the dashboard widget).
   limit?: number;
   /// "full" page treatment vs "compact" dashboard widget. Compact shrinks
@@ -37,11 +46,18 @@ export function TopTargetsList({
   title,
   kind,
   items,
+  totalMsForKind,
   limit,
   variant = 'full',
 }: TopTargetsListProps) {
   const shown = limit ? items.slice(0, limit) : items;
-  const totalMs = shown.reduce((acc, row) => acc + row.durationMs, 0);
+  // Denominator for both segment and bar percentages. Falls back to the
+  // sum of the visible rows only when the API reports zero total — which
+  // shouldn't happen alongside non-empty `items`, but guards against
+  // divide-by-zero either way.
+  const denom = totalMsForKind > 0
+    ? totalMsForKind
+    : shown.reduce((acc, row) => acc + row.durationMs, 0);
 
   const isCompact = variant === 'compact';
   const padding = isCompact ? 'p-3' : 'p-4';
@@ -65,14 +81,15 @@ export function TopTargetsList({
         <div className="flex items-center gap-4">
           <Donut
             items={shown}
-            totalMs={totalMs}
+            denom={denom}
+            centerTotalMs={totalMsForKind}
             size={isCompact ? 76 : 108}
             countLabel={kind}
           />
           <ol className="flex-1 space-y-1.5">
             {shown.map((row, i) => {
               const color = PALETTE[i % PALETTE.length];
-              const shareOfTotal = totalMs === 0 ? 0 : row.durationMs / totalMs;
+              const shareOfTotal = denom === 0 ? 0 : row.durationMs / denom;
               return (
                 <Row
                   key={row.target}
@@ -157,12 +174,18 @@ function Row({ name, durationMs, shareOfTotal, color, compact }: RowProps) {
 
 interface DonutProps {
   items: ActivityTargetTotal[];
-  totalMs: number;
+  /// Denominator for segment percentages. When equal to sum(items) the
+  /// ring fills 100% — otherwise the leftover dark portion represents
+  /// "Other" (apps ranked 6+ or sites not in the top N).
+  denom: number;
+  /// What the center prints. Matches the SummaryBand's per-kind total so
+  /// both readouts agree.
+  centerTotalMs: number;
   size: number;
   countLabel: 'apps' | 'sites';
 }
 
-function Donut({ items, totalMs, size, countLabel }: DonutProps) {
+function Donut({ items, denom, centerTotalMs, size, countLabel }: DonutProps) {
   // SVG geometry — `pathLength={100}` normalises the stroke so we can use
   // percentages as raw 0..100 numbers in `strokeDasharray`.
   const radius = size * 0.42;
@@ -171,9 +194,11 @@ function Donut({ items, totalMs, size, countLabel }: DonutProps) {
   const cy = size / 2;
 
   // Walk items in order, accumulating offsets so segments don't overlap.
+  // Segments are share-of-`denom`, so when the top-N doesn't cover the
+  // whole kind the ring naturally leaves room for the "Other" portion.
   let cumulativePct = 0;
   const segments = items.map((item, i) => {
-    const pct = totalMs === 0 ? 0 : (item.durationMs / totalMs) * 100;
+    const pct = denom === 0 ? 0 : (item.durationMs / denom) * 100;
     const offset = -cumulativePct;
     cumulativePct += pct;
     return {
@@ -196,7 +221,7 @@ function Donut({ items, totalMs, size, countLabel }: DonutProps) {
         width={size}
         height={size}
         role="img"
-        aria-label={`${items.length} ${countLabel}, total ${formatDurationCompact(totalMs)}`}
+        aria-label={`Top ${items.length} ${countLabel}, total ${formatDurationCompact(centerTotalMs)}`}
       >
         {/* Track ring — visible on empty / sub-100% donuts. */}
         <circle
@@ -256,7 +281,7 @@ function Donut({ items, totalMs, size, countLabel }: DonutProps) {
           fontFamily="ui-monospace, monospace"
           style={{ fontSize: totalFontSize }}
         >
-          {formatDurationCompact(totalMs)}
+          {formatDurationCompact(centerTotalMs)}
         </text>
       </svg>
     </div>

@@ -66,6 +66,7 @@ export function TodayActivityWidget() {
               title="Top apps"
               kind="apps"
               items={data.topApps}
+              totalMsForKind={data.totals.apps}
               limit={TOP_N}
               variant="compact"
             />
@@ -73,6 +74,7 @@ export function TodayActivityWidget() {
               title="Top sites"
               kind="sites"
               items={data.topSites}
+              totalMsForKind={data.totals.sites}
               limit={TOP_N}
               variant="compact"
             />

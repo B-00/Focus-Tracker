@@ -109,17 +109,21 @@ export function ActivityPage() {
             timezone={summaryQuery.data.range.timezone}
           />
           {/* Stacked: Top Apps over Top Sites. Each section has its own
-              donut + ranked list (see TopTargetsList). */}
+              donut + ranked list (see TopTargetsList). The per-kind total
+              from the API matches the SummaryBand "Apps" / "Sites" stats
+              so the donut centre and band always agree. */}
           <div className="flex flex-col gap-5">
             <TopTargetsList
               title="Top apps"
               kind="apps"
               items={summaryQuery.data.topApps}
+              totalMsForKind={summaryQuery.data.totals.apps}
             />
             <TopTargetsList
               title="Top sites"
               kind="sites"
               items={summaryQuery.data.topSites}
+              totalMsForKind={summaryQuery.data.totals.sites}
             />
           </div>
         </>
