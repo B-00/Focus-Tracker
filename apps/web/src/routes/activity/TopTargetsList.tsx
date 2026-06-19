@@ -38,7 +38,7 @@ const PALETTE = [
   '#f75590', // pink
   '#2191fb', // blue
   '#fbd87f', // yellow
-  '#b5f8fe', // light cyan
+  '#8b5cf6', // violet
   '#10ffcb', // aqua
 ] as const;
 
@@ -225,14 +225,15 @@ function Donut({ items, denom, centerTotalMs, size, countLabel }: DonutProps) {
       >
         {/* Track ring — visible portion represents "Other" (kind total
             minus the visible top-N segments) when the colored segments
-            don't fully wrap the circle. Violet so it's clearly distinct
-            from the palette colors and reads as a secondary band. */}
+            don't fully wrap the circle. Light cyan at reduced opacity so
+            it reads as a soft background band, clearly distinct from the
+            saturated palette segments. */}
         <circle
           cx={cx}
           cy={cy}
           r={radius}
           fill="none"
-          stroke="rgba(139, 92, 246, 0.6)"
+          stroke="rgba(181, 248, 254, 0.6)"
           strokeWidth={strokeWidth}
         />
         {/* Segments — rotated -90° so the first one starts at 12 o'clock. */}
