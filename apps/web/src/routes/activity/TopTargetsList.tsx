@@ -1,5 +1,6 @@
 import type { ActivityTargetTotal } from '@focus-tracker/shared';
 import { formatDuration, formatDurationCompact } from '../../lib/format-duration';
+import { OTHER_COLOR, PALETTE } from './palette';
 
 // Top apps / top sites — donut chart on the left, ranked list on the right.
 // Each row dot, donut segment, and mini-bar share a color so the eye can
@@ -30,22 +31,9 @@ interface TopTargetsListProps {
   variant?: 'full' | 'compact';
 }
 
-// Tailwind doesn't propagate dynamic class names into SVG `stroke` attrs,
-// so the palette ships as raw hex values. Shared between Top Apps and Top
-// Sites — color identifies rank, not kind. The `kind` distinction lives in
-// the section title and the "desktop / browser" badge in the header.
-const PALETTE = [
-  '#f75590', // pink
-  '#2191fb', // blue
-  '#fbd87f', // yellow
-  '#8b5cf6', // violet
-  '#10ffcb', // aqua
-] as const;
-
-/// Color used for both the donut track ring and the "Other" legend dot at
-/// the bottom of the list. Sharing the value here is how the legend works
-/// as a key — same color in two places links back to the same concept.
-const OTHER_COLOR = 'rgba(181, 248, 254, 0.6)';
+// PALETTE and OTHER_COLOR live in `./palette` so the stacked breakdown
+// chart can paint the same rank → color mapping. Keep this file's hue
+// usage in sync with that module.
 
 export function TopTargetsList({
   title,

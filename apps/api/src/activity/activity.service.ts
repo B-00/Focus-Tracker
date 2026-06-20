@@ -54,13 +54,23 @@ export class ActivityService {
       },
     });
 
-    // Totals + per-target sums, all in one pass.
+    // Totals + per-target sums + per-(bucket, source, target) sums in one
+    // pass. The per-bucket per-target map drives the stacked chart's
+    // segments — the chart shows each top-N target's contribution to each
+    // bucket so the user can see "Cursor in hour 14, Firefox in hour 15".
     let totalApps = 0;
     let totalSites = 0;
     const targetTotals = new Map<DeviceSource, Map<string, number>>();
     const bucketKeys: number[] = this.generateBucketKeys(from, to, bucketGrain, tz);
     const buckets = new Map<number, { apps: number; sites: number }>();
     for (const key of bucketKeys) buckets.set(key, { apps: 0, sites: 0 });
+    /// bucketKey → source → target → durationMs in that bucket.
+    /// Populated alongside the simpler totals so we don't take a second
+    /// pass over the rollup rows.
+    const perTargetByBucket = new Map<
+      number,
+      Map<DeviceSource, Map<string, number>>
+    >();
 
     for (const row of rows) {
       if (row.source === 'desktop') totalApps += row.durationMs;
@@ -71,7 +81,8 @@ export class ActivityService {
       targetTotals.set(row.source, bySource);
 
       const bucketStart = startOfBucketInTz(row.minuteBucket, tz, bucketGrain);
-      const b = buckets.get(bucketStart.getTime());
+      const bucketKey = bucketStart.getTime();
+      const b = buckets.get(bucketKey);
       // A row falling outside the generated bucket range can happen on a
       // DST spring-forward edge where the loop boundary math doesn't quite
       // line up with the rollup row's bucket. Drop silently — the totals
@@ -79,7 +90,26 @@ export class ActivityService {
       if (!b) continue;
       if (row.source === 'desktop') b.apps += row.durationMs;
       else b.sites += row.durationMs;
+
+      // Per-target breakdown for the stacked chart.
+      let bucketTargets = perTargetByBucket.get(bucketKey);
+      if (!bucketTargets) {
+        bucketTargets = new Map();
+        perTargetByBucket.set(bucketKey, bucketTargets);
+      }
+      let sourceTargets = bucketTargets.get(row.source);
+      if (!sourceTargets) {
+        sourceTargets = new Map();
+        bucketTargets.set(row.source, sourceTargets);
+      }
+      sourceTargets.set(
+        row.target,
+        (sourceTargets.get(row.target) ?? 0) + row.durationMs,
+      );
     }
+
+    const topApps = this.topN(targetTotals.get('desktop'));
+    const topSites = this.topN(targetTotals.get('browser'));
 
     return {
       range: {
@@ -94,12 +124,28 @@ export class ActivityService {
         apps: totalApps,
         sites: totalSites,
       },
-      topApps: this.topN(targetTotals.get('desktop')),
-      topSites: this.topN(targetTotals.get('browser')),
-      buckets: bucketKeys.map((key) => ({
-        bucketStart: new Date(key).toISOString(),
-        ...buckets.get(key)!,
-      })) satisfies ActivityBucket[],
+      topApps,
+      topSites,
+      buckets: bucketKeys.map((key) => {
+        const b = buckets.get(key)!;
+        const sources = perTargetByBucket.get(key);
+        const appsTargets = sources?.get('desktop');
+        const sitesTargets = sources?.get('browser');
+        return {
+          bucketStart: new Date(key).toISOString(),
+          apps: b.apps,
+          sites: b.sites,
+          // Align with topApps / topSites order. Missing targets => 0
+          // (the target wasn't active in this bucket). The chart computes
+          // "Other" share as `apps - sum(appsByTopTarget)`.
+          appsByTopTarget: topApps.map(
+            (t) => appsTargets?.get(t.target) ?? 0,
+          ),
+          sitesByTopTarget: topSites.map(
+            (t) => sitesTargets?.get(t.target) ?? 0,
+          ),
+        };
+      }) satisfies ActivityBucket[],
     };
   }
 

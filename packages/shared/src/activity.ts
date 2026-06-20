@@ -60,12 +60,23 @@ export type ActivityTargetTotal = z.infer<typeof activityTargetTotalSchema>;
 /// For grain=hour: `bucketStart` is the start of an hour-in-user's-TZ.
 /// For grain=day:  `bucketStart` is the start of a day-in-user's-TZ.
 ///
-/// The two values split the total active time in the bucket by source so
-/// the client can stack apps + sites in a single bar.
+/// `apps` / `sites` are the total active time per source in the bucket —
+/// kept for backward-compatibility consumers like the dashboard MiniBar
+/// silhouette which only care about the silhouette shape.
+///
+/// `appsByTopTarget` / `sitesByTopTarget` are aligned by index with the
+/// `topApps` / `topSites` arrays at the top of the response. Each entry
+/// is the bucket's time spent on that top-N target in ms. The "Other"
+/// portion for the bucket is derived client-side as
+/// `apps - sum(appsByTopTarget)` (always ≥ 0). This lets the stacked
+/// chart render with the same color identity as the donut + ranked list
+/// without sending a target name on every bucket row.
 export const activityBucketSchema = z.object({
   bucketStart: z.string().datetime(),
   apps: z.number().int().nonnegative(),
   sites: z.number().int().nonnegative(),
+  appsByTopTarget: z.array(z.number().int().nonnegative()),
+  sitesByTopTarget: z.array(z.number().int().nonnegative()),
 });
 export type ActivityBucket = z.infer<typeof activityBucketSchema>;
 

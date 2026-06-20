@@ -103,8 +103,20 @@ export function ActivityPage() {
       {summaryQuery.data && (
         <>
           <SummaryBand summary={summaryQuery.data} />
+          {/* One breakdown per kind. The apps chart's segments share colors
+              with the Top Apps donut below (rank → palette index), and the
+              sites chart follows the same pattern for Top Sites. */}
           <HourlyBreakdown
+            kind="apps"
             buckets={summaryQuery.data.buckets}
+            topTargets={summaryQuery.data.topApps}
+            grain={summaryQuery.data.range.bucketGrain}
+            timezone={summaryQuery.data.range.timezone}
+          />
+          <HourlyBreakdown
+            kind="sites"
+            buckets={summaryQuery.data.buckets}
+            topTargets={summaryQuery.data.topSites}
             grain={summaryQuery.data.range.bucketGrain}
             timezone={summaryQuery.data.range.timezone}
           />
