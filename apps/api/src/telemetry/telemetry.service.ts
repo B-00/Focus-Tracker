@@ -13,6 +13,16 @@ import type {
 import { PrismaService } from '../prisma/prisma.service';
 import type { ApiKeyRequestContext } from '../auth/api-key-auth.guard';
 
+/// Hard cap on `ActivityMinuteRollup.durationMs` per row. A row represents
+/// "time spent on (user, source, target) during a single minute bucket",
+/// so the maximum honest value is 60_000 ms. Multi-device users (e.g. a
+/// dev workstation + a livestream rig) can otherwise have two devices
+/// attributing time to the same `(user, source, target, minute)` slot,
+/// pushing the per-row total past wall clock. We clamp at ingest so the
+/// rollup never stores nonsense values that would later confuse the
+/// Activity totals or per-minute aggregations.
+const MINUTE_BUCKET_MAX_MS = 60_000;
+
 /// Idempotent telemetry ingest (PROJECT.md §12.4 / §12.5 + Activity.md §3.2).
 ///
 /// Wire contract:
@@ -132,32 +142,52 @@ export class TelemetryService {
       });
 
       // 5. Activity rollup — only focus_change events feed it (Activity.md §3).
+      //    Each row is hard-capped at MINUTE_BUCKET_MAX_MS so two devices
+      //    attributing time to the same (user, source, target, minute) slot
+      //    can't push the per-row total past 60s wall clock. We read the
+      //    existing row inside the same transaction to compute the remaining
+      //    budget, then upsert with the clamped increment. Read-modify-write
+      //    pairs are safe here because the surrounding $transaction holds the
+      //    same Postgres connection serially.
       for (const event of newEvents) {
         if (event.kind !== 'focus_change') continue;
         const buckets = this.splitAcrossMinutes(event);
         const rollupTarget = this.deriveRollupTarget(event);
         if (rollupTarget === null) continue;
         for (const bucket of buckets) {
-          await tx.activityMinuteRollup.upsert({
-            where: {
-              userId_source_target_minuteBucket: {
-                userId: client.userId,
-                source: event.source,
-                target: rollupTarget,
-                minuteBucket: bucket.minuteBucket,
-              },
-            },
-            create: {
+          if (bucket.durationMs <= 0) continue;
+          const slotKey = {
+            userId_source_target_minuteBucket: {
               userId: client.userId,
               source: event.source,
               target: rollupTarget,
               minuteBucket: bucket.minuteBucket,
-              durationMs: bucket.durationMs,
             },
-            update: {
-              durationMs: { increment: bucket.durationMs },
-            },
+          };
+          const existing = await tx.activityMinuteRollup.findUnique({
+            where: slotKey,
+            select: { durationMs: true },
           });
+          const currentMs = existing?.durationMs ?? 0;
+          const budgetMs = MINUTE_BUCKET_MAX_MS - currentMs;
+          if (budgetMs <= 0) continue; // slot already at cap
+          const addMs = Math.min(bucket.durationMs, budgetMs);
+          if (existing) {
+            await tx.activityMinuteRollup.update({
+              where: slotKey,
+              data: { durationMs: { increment: addMs } },
+            });
+          } else {
+            await tx.activityMinuteRollup.create({
+              data: {
+                userId: client.userId,
+                source: event.source,
+                target: rollupTarget,
+                minuteBucket: bucket.minuteBucket,
+                durationMs: addMs,
+              },
+            });
+          }
         }
       }
 

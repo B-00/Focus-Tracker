@@ -11,6 +11,7 @@ import { tokenStorage } from './lib/token-storage';
 import { LoginPage } from './routes/Login';
 import { DashboardPage } from './routes/Dashboard';
 import { SettingsPage } from './routes/Settings';
+import { ActivityPage } from './routes/Activity';
 
 // Code-based routing (no codegen). Tree:
 //
@@ -82,9 +83,15 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const activityRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/activity',
+  component: ActivityPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedLayout.addChildren([dashboardRoute, settingsRoute]),
+  protectedLayout.addChildren([dashboardRoute, activityRoute, settingsRoute]),
 ]);
 
 export const router = createRouter({
