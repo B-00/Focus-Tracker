@@ -1,10 +1,12 @@
 # Focus Tracker — Browser Extension (Source Spec)
 
-> Companion browser extension for the Focus Tracker web app.
+> Companion Firefox extension for the Focus Tracker web app.
 > Captures **website focus events** (which domain/tab is active and for how long) and pushes them to the Focus Tracker API.
 > One of two telemetry sources alongside the desktop app.
 
-**Status:** Specification in progress. Will be built and shipped as a **separate project / repo**. The contract with the main app is captured here so the two repos stay in sync.
+**Status:** Specification in progress. Lives inside the main pnpm monorepo as `apps/extension/`.
+
+**Scope:** **Firefox-only in v1.** Chrome/Edge/Safari are explicit non-goals for v1 — see §11. The design uses `browser.*` natively and a non-persistent event page background, both of which are Firefox idioms. Porting to Chrome would require the changes catalogued in §11.
 
 ---
 
@@ -29,12 +31,13 @@ Mirrors the main project (see `PROJECT.md` §1.1):
 
 ### Goals
 - Measure website usage with second-level accuracy.
-- Survive offline periods, browser restarts, service-worker death, and unexpected crashes.
+- Survive offline periods, browser restarts, event-page suspend/resume, and unexpected crashes.
 - Respect privacy: domain-only by default, incognito always off.
-- Cross-browser: Chrome, Firefox, Edge from one codebase.
+- Firefox-first: ship a single Firefox build, no cross-browser shim overhead.
 - Minimal footprint — no content scripts, no DOM injection, no telemetry from page content.
 
 ### Non-Goals (v1)
+- Chrome / Edge / Safari support (deferred — see §11).
 - Tracking inside iframes or specific page elements.
 - Reading page content, form data, or DOM state.
 - Productivity scoring on the client (the server categorizes/aggregates).
@@ -45,18 +48,19 @@ Mirrors the main project (see `PROJECT.md` §1.1):
 
 ## 3. Tech Stack
 
-| Concern         | Choice                                                  | Notes                                                            |
-| --------------- | ------------------------------------------------------- | ---------------------------------------------------------------- |
-| Manifest        | **Manifest V3 (MV3)**                                   | Required by Chrome. Firefox MV3 is mature as of 2025.            |
-| Language        | **TypeScript** (strict)                                 |                                                                  |
-| Build tool      | **Vite** with `@crxjs/vite-plugin`                      | HMR for the popup; bundles the service worker properly.          |
-| Popup UI        | **React 18 + TypeScript**                               | Reuse shadcn/ui + Tailwind patterns from the main web app.       |
-| Local storage   | **IndexedDB** via the `idb` wrapper (~3 KB)             | Outbox pattern.                                                  |
-| Settings store  | `chrome.storage.local`                                  | Pairing state, API key, user prefs.                              |
-| Cross-browser   | **`webextension-polyfill`**                             | Single codebase → Chrome, Firefox, Edge.                         |
-| Icons           | **Lucide React**                                        | Matches the main app's stroke style.                             |
-| Tests           | **Vitest** for unit (opt-in, where logic is non-obvious); no E2E in v1 (per `PROJECT.md` §2.3) |                                                                  |
-| Lint / format   | ESLint + Prettier                                       |                                                                  |
+| Concern         | Choice                                                                                          | Notes                                                                                                                       |
+| --------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Manifest        | **Manifest V3 (MV3)** with a non-persistent **event page** (`background.scripts`)               | Firefox MV3 supports both event pages and service workers; event pages are simpler and don't fight a Chrome-SW lifecycle.   |
+| Browser API     | `browser.*` namespace, native to Firefox                                                        | No `webextension-polyfill` — single-target means we use the Promise-based `browser.*` API directly.                          |
+| Language        | **TypeScript** (strict) with `@types/firefox-webext-browser`                                    |                                                                                                                             |
+| Build tool      | **Vite** in library mode for the background + content-free entry points                         | No `@crxjs/vite-plugin` (Chrome-flavored). Output is plain ES modules + a static manifest copied at build time.              |
+| Dev loop        | **`web-ext` CLI**                                                                                | `web-ext run --target=firefox-desktop` for auto-reload; `web-ext build` for `.xpi`; `web-ext lint` against AMO rules.        |
+| Popup / Options | **React 18 + Tailwind**                                                                          | Reuses the main web app's design tokens via a shared Tailwind preset.                                                       |
+| Local storage   | **IndexedDB** via the `idb` wrapper (~3 KB)                                                      | Outbox pattern, same as the desktop app's JSONL outbox conceptually.                                                        |
+| Settings store  | `browser.storage.local`                                                                          | Pairing state, API key, user prefs.                                                                                          |
+| Icons           | **Lucide React**                                                                                 | Matches the main app's stroke style.                                                                                         |
+| Tests           | **Vitest** for unit (opt-in, where logic is non-obvious); no E2E in v1 (per `PROJECT.md` §2.3)   |                                                                                                                             |
+| Lint / format   | ESLint + Prettier; `web-ext lint` in CI before signing                                           |                                                                                                                             |
 
 ---
 
@@ -64,44 +68,47 @@ Mirrors the main project (see `PROJECT.md` §1.1):
 
 | Permission                          | Why                                                                                |
 | ----------------------------------- | ---------------------------------------------------------------------------------- |
-| `storage`                           | Settings, API key, pairing state                                                   |
-| `unlimitedStorage`                  | Removes the 10 MB cap on the IndexedDB outbox (free, no extra install prompt)      |
-| `tabs`                              | Read active tab metadata (`url`, `title`)                                          |
-| `idle`                              | Detect AFK transitions via `chrome.idle.onStateChanged`                            |
-| `alarms`                            | Drive the flush timer (`setInterval` does **not** survive service-worker death)    |
-| `host_permissions: <all_urls>`      | Required to read the URL of the focused tab on any domain                          |
-| `host_permissions: http://localhost/*` (dev) / configured API URL (later) | Required for `fetch()` to the Focus Tracker API |
+| `storage`                                                                  | Settings, API key, pairing state                                                       |
+| `unlimitedStorage`                                                         | Removes the 10 MB cap on the IndexedDB outbox (free, no extra install prompt)          |
+| `tabs`                                                                     | Read active tab metadata (`url`, `title`)                                              |
+| `idle`                                                                     | Detect AFK transitions via `browser.idle.onStateChanged`                               |
+| `alarms`                                                                   | Drive the flush timer (`setInterval` doesn't survive event-page suspend)               |
+| `host_permissions: <all_urls>`                                             | Required to read the URL of the focused tab on any domain                              |
+| `host_permissions: http://localhost/*` (dev) / configured API URL (later)  | Required for `fetch()` from the background to the Focus Tracker API                    |
 
 The install screen should explain plainly **why** each permission is requested — especially `<all_urls>`, which sounds scarier than it is.
 
-> **Note on the API host permission.** While the API lives on `http://localhost:3000` in local-first mode, Chrome/Firefox will allow `fetch()` from the service worker to that origin if it's covered by `host_permissions`. When the API later moves to a real URL, the options page either prompts the user to grant the new host (via `chrome.permissions.request`) or the new URL ships in a bumped manifest. Either approach is documented in §17.
+> **Note on the API host permission.** In local-first mode the API lives on `http://localhost:3000` and the manifest ships with `http://localhost/*` already granted. When the API later moves to a real URL, the options page calls `browser.permissions.request({ origins: [newUrl + "/*"] })` to acquire the host at runtime, so the manifest doesn't need to ship with every possible URL pre-listed (see §17).
 
 ---
 
 ## 5. Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│ Background Service Worker (MV3)                                │
-│  ├── Capture: chrome.tabs.*, chrome.windows.*, chrome.idle.*   │
-│  ├── Outbox: IndexedDB (idb)                                   │
-│  ├── Flusher: chrome.alarms (60s) + threshold trigger          │
-│  ├── Auth:  device API key in chrome.storage.local             │
-│  └── HTTP:  fetch() with Bearer token                          │
-└────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ Background Event Page (MV3, non-persistent)                     │
+│  ├── Capture: browser.tabs.*, browser.windows.*, browser.idle.* │
+│  ├── Outbox: IndexedDB (idb)                                    │
+│  ├── Flusher: browser.alarms (60s) + threshold trigger          │
+│  ├── Auth:   device API key in browser.storage.local            │
+│  └── HTTP:   fetch() with Bearer token                          │
+└─────────────────────────────────────────────────────────────────┘
           ▲                                       ▲
-          │ messages                              │ messages
+          │ runtime messages                      │ runtime messages
           ▼                                       ▼
 ┌──────────────────────┐                ┌──────────────────────┐
 │ Popup (React)        │                │ Options Page (React) │
-│  - current site      │                │  - pairing flow      │
+│  - paired state      │                │  - pairing flow      │
+│  - current site      │                │  - API base URL      │
 │  - queue depth       │                │  - privacy controls  │
 │  - pause toggle      │                │  - permissions help  │
-│  - last sync time    │                │                      │
+│  - last sync time    │                │  - error log         │
 └──────────────────────┘                └──────────────────────┘
 ```
 
 **No content scripts** in v1. All capture is event-driven from the background.
+
+The event page wakes on capture events, alarm ticks, and runtime messages from the popup/options UI; Firefox unloads it after periods of inactivity. State that must survive a sleep cycle lives in IndexedDB or `browser.storage.local` — there is no in-process cache that survives suspension.
 
 ---
 
@@ -112,11 +119,11 @@ The install screen should explain plainly **why** each permission is requested �
 | Type              | Emitted when                                                        |
 | ----------------- | ------------------------------------------------------------------- |
 | `focus_change`    | Active tab or focused window changes                                |
-| `heartbeat`       | Every 60s while extension is awake (liveness signal)                |
-| `session_start`   | Service worker spins up                                             |
-| `session_end`     | Service worker is shutting down (best-effort)                       |
+| `heartbeat`       | Every 60s while the event page is awake (liveness signal)           |
+| `session_start`   | Event page wakes from a cold start                                  |
+| `session_end`     | Event page is suspending (best-effort, fires from `runtime.onSuspend`) |
 
-**Idle handling is internal-only — not a wire event.** The service worker subscribes to `chrome.idle.onStateChanged` (`idle` / `locked` / `active`) purely to bound the `endedAt` of the in-flight `focus_change` event. On transition to `idle` or `locked`, finalise the current event with `endedAt = idle-detection-time` and stop tracking; on `active`, start a fresh `focus_change` event. This prevents a left-open browser tab from accumulating phantom time while the user is away.
+**Idle handling is internal-only — not a wire event.** The background subscribes to `browser.idle.onStateChanged` (`idle` / `locked` / `active`) purely to bound the `endedAt` of the in-flight `focus_change` event. On transition to `idle` or `locked`, finalise the current event with `endedAt = idle-detection-time` and stop tracking; on `active`, start a fresh `focus_change` event. This prevents a left-open browser tab from accumulating phantom time while the user is away.
 
 ### 6.2 Raw Event Shape
 
@@ -154,19 +161,19 @@ The install screen should explain plainly **why** each permission is requested �
 - **Delete on ack:** server returns accepted + duplicate IDs → single transaction deletes them
 - **Backpressure cap:** 30 days **OR** 100,000 events
   - When exceeded: drop oldest events silently (no synthetic gap-marker event in v1 — see `PROJECT.md` §12.2 / §12.4)
-- **Settings store:** `chrome.storage.local` (separate from the outbox)
+- **Settings store:** `browser.storage.local` (separate from the outbox)
   - Pairing state, device API key, user preferences
 
-**Known limitation (documented, not fixed in v1):** `chrome.storage.local` is unencrypted on disk. The device API key sitting there is industry-standard for extensions but worth disclosing in the privacy notes.
+**Known limitation (documented, not fixed in v1):** `browser.storage.local` is unencrypted on disk. The device API key sitting there is industry-standard for extensions but worth disclosing in the privacy notes.
 
 ---
 
 ## 8. Sync / Flush State Machine
 
 ### Triggers
-1. **Time-based:** `chrome.alarms` firing every 60s.
+1. **Time-based:** `browser.alarms` firing every 60s.
 2. **Buffer threshold:** ≥50 events queued in the outbox.
-3. **Lifecycle:** on `chrome.runtime.onSuspend` (best-effort under MV3).
+3. **Lifecycle:** on `browser.runtime.onSuspend` (best-effort — event page may be unloaded before the flush completes; the outbox preserves the events for the next wake).
 4. **Reconnect:** when `navigator.onLine` flips true → fire an immediate flush.
 
 ### Per-flush logic
@@ -247,7 +254,7 @@ Body (batch envelope):
 
 ### 9.3 Token Lifecycle
 - Long-lived (no expiry by default).
-- Stored in `chrome.storage.local` (see §7 limitation note).
+- Stored in `browser.storage.local` (see §7 limitation note).
 - On `401`: flushing halts; popup shows a "Re-pair device" CTA. Outbox is preserved.
 - Revocation is one-click from the web app's Settings → Devices.
 
@@ -265,21 +272,21 @@ Body (batch envelope):
 
 ## 11. Cross-Browser Support
 
-| Browser  | Status (v1) | Notes                                                  |
-| -------- | ----------- | ------------------------------------------------------ |
-| Chrome   | Primary     | MV3 native                                             |
-| Edge     | Primary     | Same Chromium build; ships to Edge Add-ons separately  |
-| Firefox  | Primary     | Via `webextension-polyfill`; MV3 mature as of 2025     |
-| Safari   | Out of v1   | Different toolchain (Xcode-based)                      |
+| Browser  | Status (v1) | Notes                                                                                                    |
+| -------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| Firefox  | **Primary** | MV3 with event-page background; uses native `browser.*` and `web-ext` toolchain.                          |
+| Chrome   | Out of v1   | Would require: SW background instead of event page, `webextension-polyfill` (or hand-rewrite to `chrome.*`), `@crxjs/vite-plugin` or equivalent, Chrome Web Store packaging. |
+| Edge     | Out of v1   | Inherits whatever Chrome support lands.                                                                  |
+| Safari   | Out of v1   | Different toolchain (Xcode-based).                                                                       |
+
+A port to Chrome is a future possibility; the spec just stops pretending v1 ships there.
 
 ---
 
 ## 12. Distribution
 
-- **Chrome Web Store** (primary)
-- **Firefox Add-ons (AMO)**
-- **Edge Add-ons** (secondary)
-- Auto-updates handled by each store; no custom updater.
+- **Firefox Add-ons (AMO)** — `web-ext sign` produces the `.xpi`; AMO handles auto-updates.
+- For local/self-install during dev, `about:debugging` → "Load Temporary Add-on" loads the unpacked `dist/` directory. `web-ext run` automates this on every change.
 
 ---
 
@@ -321,7 +328,7 @@ The extension does **not** know if a focus session is currently active in the ma
 - Should the flush interval be user-configurable, or fixed at 60s?
 - Diagnostics: opt-in error reports, just local log files, or both?
 - Bug-report UX: bundle the local error log + last batch + extension version into a downloadable JSON?
-- Migration path if we ever switch from `chrome.storage.local` for the API key to something more secure.
+- Migration path if we ever switch from `browser.storage.local` for the API key to something more secure.
 - Should the extension visibly show "you're in a focus session right now" in the popup? (Requires either §15 option 2 or a push channel.)
 - Detailed key-rotation strategy if a device is compromised.
 
@@ -339,8 +346,8 @@ Because this is a local-first project (see §1.1), the extension must not hard-c
 
 Rules:
 
-- The URL is stored in `chrome.storage.local` under `apiBaseUrl`.
+- The URL is stored in `browser.storage.local` under `apiBaseUrl`.
 - It can only be changed when **no device is paired**. To switch URLs after pairing, the user re-pairs against the new server (the old API key is invalidated locally).
-- On startup, the service worker validates the URL is reachable (HEAD `/v1/health`) and surfaces a clear error in the popup if not.
-- When the URL changes to a new host, the extension calls `chrome.permissions.request({ origins: [newUrl + "/*"] })` to acquire the host permission at runtime, so the manifest doesn't need to ship with every possible URL pre-listed.
+- On wake, the event page validates the URL is reachable (HEAD `/v1/health`) and surfaces a clear error in the popup if not.
+- When the URL changes to a new host, the extension calls `browser.permissions.request({ origins: [newUrl + "/*"] })` to acquire the host permission at runtime, so the manifest doesn't need to ship with every possible URL pre-listed.
 - Mixed-content rules apply normally: an `https://` web app cannot talk to an `http://` API. For localhost, both should be HTTP in dev.

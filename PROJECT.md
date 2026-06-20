@@ -531,7 +531,7 @@ Each install of either client is treated as a separate **device**. Devices authe
 - Keys are minted per-device, not per-user. A user with two browsers + one laptop has three keys.
 - Keys are scoped — they can ingest telemetry events but cannot read tasks, projects, or any other user data.
 - Keys are revocable per-device from the web app.
-- Keys are stored in the OS keychain (desktop) or `chrome.storage.local` (extension, with documented limitation).
+- Keys are stored in the OS keychain (desktop) or `browser.storage.local` (extension, with documented limitation).
 
 Full auth spec for both sides of the flow — the device's API-key path AND the web app's JWT requirement for the pairing claim — lives in `Features Markdown/Auth.md` §5. The JWT vs API-key guard separation, the `ft_live_` prefix format, the hash-only storage rule, and the rate-limit posture on the unauthenticated bootstrap endpoints are all defined there.
 
