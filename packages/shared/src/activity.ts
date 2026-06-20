@@ -24,8 +24,9 @@ export type ActivityRange = (typeof ACTIVITY_RANGES)[number];
 export const ACTIVITY_BUCKET_GRAINS = ['hour', 'day'] as const;
 export type ActivityBucketGrain = (typeof ACTIVITY_BUCKET_GRAINS)[number];
 
-/// Top-N cap for app / site lists. The dashboard widget slices this down
-/// to its own preference (top 3 per spec); the page surfaces all 5.
+/// Top-N cap for app / site lists. Both the `/activity` page and the
+/// dashboard widget render this many rows so rank-N identity is the
+/// same color in both places at a glance.
 export const ACTIVITY_TOP_N = 5;
 
 /// Hard cap for the recent-events feed payload. Anything above this is

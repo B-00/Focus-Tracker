@@ -14,7 +14,11 @@ import { TopTargetsList } from '../activity/TopTargetsList';
 // the API load. TanStack Query coalesces the polls per key.
 
 const POLL_INTERVAL_MS = 60_000;
-const TOP_N = 3;
+// Matches `/activity` page's default (ACTIVITY_TOP_N) so the dashboard
+// and the deep-dive page agree on rank-N identity at a glance. Earlier
+// spec called for 3 here to keep the widget glance-short; the visual
+// symmetry won out.
+const TOP_N = 5;
 
 export function TodayActivityWidget() {
   const { data, isLoading, isError, error } = useQuery({
