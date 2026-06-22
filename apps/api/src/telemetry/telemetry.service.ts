@@ -23,6 +23,37 @@ import type { ApiKeyRequestContext } from '../auth/api-key-auth.guard';
 /// Activity totals or per-minute aggregations.
 const MINUTE_BUCKET_MAX_MS = 60_000;
 
+/// PostgreSQL `text` and `jsonb` columns refuse U+0000 (NUL) bytes —
+/// they raise `22P05: unsupported Unicode escape sequence`. Windows app
+/// names occasionally come back from Win32 APIs with embedded NUL
+/// terminators that escape into the desktop client's `target.appName`,
+/// and that one poison event then blocks the entire 50-event batch
+/// from being persisted (createMany is all-or-nothing in a transaction).
+///
+/// This recursively strips NUL bytes from every string in a JSON-like
+/// value. We sanitize once at the top of `ingest()` so both the rollup
+/// target derivation and the createMany see clean strings. Clients are
+/// expected to do the same on their side (defence in depth), but the
+/// server is the single chokepoint that protects the DB from any
+/// client's bug.
+function stripNulBytes<T>(value: T): T {
+  if (typeof value === 'string') {
+    // `\u0000` is the literal NUL character; replace globally.
+    return value.replace(/\u0000/g, '') as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((v) => stripNulBytes(v)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = stripNulBytes(v);
+    }
+    return out as unknown as T;
+  }
+  return value;
+}
+
 /// Idempotent telemetry ingest (PROJECT.md §12.4 / §12.5 + Activity.md §3.2).
 ///
 /// Wire contract:
@@ -51,8 +82,33 @@ export class TelemetryService {
 
   async ingest(
     client: ApiKeyRequestContext,
-    batch: TelemetryBatch,
+    rawBatch: TelemetryBatch,
   ): Promise<TelemetryBatchResponse> {
+    // -------------------------------------------------------------------
+    //  0. Sanitise NUL bytes BEFORE any downstream use of the events.
+    //     A single event whose `target.appName` (or any other string)
+    //     contains U+0000 will otherwise poison the whole batch:
+    //     createMany is all-or-nothing within the transaction, Postgres
+    //     rejects with 22P05, and the desktop client's outbox accumulates
+    //     forever because every retry includes the same bad row. See
+    //     `stripNulBytes` doc comment above.
+    //
+    //     We replace the whole batch reference up front so every later
+    //     read (dedup, attribution, createMany, rollup target derivation)
+    //     sees the cleaned events without any one site being missable.
+    // -------------------------------------------------------------------
+    const batch = stripNulBytes(rawBatch);
+    if (this.batchContainedNulBytes(rawBatch, batch)) {
+      // Log once per batch (not per event) so a misbehaving client
+      // doesn't flood the log. The deviceId + batchId pair is enough to
+      // trace back to the source.
+      this.logger.warn(
+        `Stripped NUL bytes from telemetry batch ` +
+          `(device=${client.deviceId}, source=${batch.events[0]?.source ?? 'unknown'}, ` +
+          `firstEventId=${batch.events[0]?.id ?? 'empty'}, count=${batch.events.length}).`,
+      );
+    }
+
     // -------------------------------------------------------------------
     //  1. Device check (defence in depth — the API key is already
     //     bound to a device; a mismatching deviceId in the body would
@@ -323,6 +379,18 @@ export class TelemetryService {
 
   private truncateToMinute(ms: number): Date {
     return new Date(Math.floor(ms / 60_000) * 60_000);
+  }
+
+  /// Cheap equality probe: stringify both sides and compare lengths.
+  /// `stripNulBytes` is the only transform we applied, and it only
+  /// shortens strings, so a length delta is sufficient evidence that
+  /// at least one NUL byte was stripped. We avoid a deep structural
+  /// compare since this runs on every batch.
+  private batchContainedNulBytes(
+    before: TelemetryBatch,
+    after: TelemetryBatch,
+  ): boolean {
+    return JSON.stringify(before).length !== JSON.stringify(after).length;
   }
 
   /// Used when a batch is 100% duplicates — we still want to record that
