@@ -182,7 +182,7 @@ function Bar({ row, scaleDenom, isHovered, onEnter }: BarProps) {
       )}
       {row.total > 0 && (
         <div
-          className={`flex w-full flex-col-reverse overflow-hidden rounded-sm transition ${
+          className={`flex w-full flex-col-reverse overflow-hidden transition ${
             isHovered ? 'ring-1 ring-neutral-500' : ''
           }`}
           style={{ height: `${heightFrac * 100}%` }}
