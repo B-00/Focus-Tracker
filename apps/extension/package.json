@@ -8,7 +8,7 @@
     "build": "vite build",
     "build:watch": "vite build --watch",
     "dev": "concurrently --kill-others --names build,firefox --prefix-colors blue,magenta \"pnpm build:watch\" \"pnpm webext:run\"",
-    "webext:run": "web-ext run --source-dir=dist --target=firefox-desktop --start-url=about:debugging#/runtime/this-firefox",
+    "webext:run": "web-ext run --source-dir=dist --target=firefox-desktop --firefox=firefoxdeveloperedition --start-url=about:debugging#/runtime/this-firefox",
     "webext:lint": "web-ext lint --source-dir=dist",
     "webext:build": "web-ext build --source-dir=dist --artifacts-dir=web-ext-artifacts --overwrite-dest",
     "typecheck": "tsc --noEmit"

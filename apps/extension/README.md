@@ -17,7 +17,9 @@ pnpm dev
 `pnpm dev` runs two things in parallel:
 
 1. `vite build --watch` — rebuilds `dist/` on every source change.
-2. `web-ext run --target=firefox-desktop` — launches a temporary Firefox profile, side-loads the unpacked extension from `dist/`, and auto-reloads it on every rebuild.
+2. `web-ext run --target=firefox-desktop --firefox=firefoxdeveloperedition` — launches a temporary **Firefox Developer Edition** profile, side-loads the unpacked extension from `dist/`, and auto-reloads it on every rebuild.
+
+> The `--firefox=firefoxdeveloperedition` alias resolves to `C:\Program Files\Firefox Developer Edition\firefox.exe` on Windows. If you install Developer Edition somewhere else, replace the alias with an absolute path.
 
 `web-ext` opens Firefox to `about:debugging#/runtime/this-firefox`. From there, click **Inspect** on the "Focus Tracker" entry to get a devtools window for the background event page. The console there is where the `[focus-tracker]` log lines appear.
 
