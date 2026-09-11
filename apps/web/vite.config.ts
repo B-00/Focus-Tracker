@@ -7,15 +7,14 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    // Bind to IPv4 loopback explicitly. Without this, Vite on Windows +
-    // recent Node binds to `[::1]:5173` only (IPv6 loopback), and Edge/
-    // Chromium resolves `localhost` to `127.0.0.1` first — the browser
-    // hits ECONNREFUSED even though `curl http://localhost:5173` works
-    // (curl happens to try IPv6). `127.0.0.1` also matches the API
-    // proxy target below so both sides of the dev loop use the same
-    // loopback family. ponytail: hardcoded IPv4 loopback; if we ever
-    // want LAN access from another device, switch to `true` here.
-    host: '127.0.0.1',
+    // Bind to IPv6 wildcard with Node's default dual-stack enabled, so
+    // `http://localhost:5173`, `http://127.0.0.1:5173`, and `http://[::1]:5173`
+    // all reach us. Windows resolves `localhost` inconsistently across
+    // browsers/launchers (Cursor's embedded browser hits IPv4; the desktop
+    // app's `tauri-plugin-opener` → Edge hits IPv6), so listening on one
+    // stack broke the other. Dual-stack `::` covers both without exposing
+    // LAN. ponytail: relies on Node's default `ipv6Only: false`.
+    host: '::',
     // Proxy API requests so the web client can use relative `/v1/...` URLs in
     // dev. In production the web client points at the real API origin via
     // VITE_API_BASE_URL.

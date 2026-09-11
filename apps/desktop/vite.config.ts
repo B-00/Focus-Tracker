@@ -21,7 +21,10 @@ export default defineConfig({
   server: {
     port: TAURI_DEV_PORT,
     strictPort: true,
-    host: TAURI_DEV_HOST ?? false,
+    // Dual-stack loopback (`::` with Node's default `ipv6Only: false`) so
+    // WebView2 reaches us whether it resolves `localhost` to `::1` or
+    // `127.0.0.1`. Same fix as apps/web/vite.config.ts. ponytail: `::`.
+    host: TAURI_DEV_HOST ?? '::',
     hmr: TAURI_DEV_HOST
       ? { protocol: 'ws', host: TAURI_DEV_HOST, port: TAURI_DEV_PORT + 1 }
       : undefined,
