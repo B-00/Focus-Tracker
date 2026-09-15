@@ -55,10 +55,10 @@ This module currently only **logs** transitions. Slice 2 will:
 
 Slice 1 is verified manually by:
 
-1. `pnpm dev` (from `apps/extension/`).
-2. Firefox launches via `web-ext`.
-3. Open `about:debugging` → "This Firefox" → find "Focus Tracker" → "Inspect".
-4. Switch between tabs/windows; observe `[focus-tracker] focus transition:` log lines in the devtools console.
+1. `pnpm dev` from `apps/extension/` — starts `vite build --watch` (no Firefox launch).
+2. In an already-open Firefox Developer Edition, load `apps/extension/dist/manifest.json` once via `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** (see `README.md` for the reload cycle).
+3. Open the **Inspect** window for the Focus Tracker entry to reach the background event page's devtools console.
+4. Switch between tabs/windows; observe `[focus-tracker] focus transition:` log lines.
 5. Lock the screen; verify the next log line is `→ (none)` after the 60s idle threshold.
 
 No unit tests in slice 1 — the logic is almost entirely Firefox API plumbing, and the integration test (steps 1–5 above) covers the meaningful behavior cheaply.

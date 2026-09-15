@@ -6,7 +6,8 @@ import { resolve } from 'node:path';
 //
 // The extension has multiple, browser-loaded entry points (background event
 // page in slice 1; popup + options HTML in slice 3). Each must end up as a
-// standalone bundle under `dist/`, ready for `web-ext run` to pick up.
+// standalone bundle under `dist/`, ready for Firefox to side-load via
+// `about:debugging#/runtime/this-firefox` → Load Temporary Add-on…
 //
 // The manifest.json + icons get copied from the source tree as-is via
 // `vite-plugin-static-copy` so we don't have to maintain a parallel

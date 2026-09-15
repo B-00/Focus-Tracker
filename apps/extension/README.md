@@ -14,28 +14,47 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` runs two things in parallel:
+`pnpm dev` runs `vite build --watch` — it rebuilds `dist/` on every source change. It does **not** launch a Firefox window; you side-load the extension yourself once and use Firefox's built-in reload to pick up subsequent rebuilds.
 
-1. `vite build --watch` — rebuilds `dist/` on every source change.
-2. `web-ext run --target=firefox-desktop --firefox=firefoxdeveloperedition` — launches a temporary **Firefox Developer Edition** profile, side-loads the unpacked extension from `dist/`, and auto-reloads it on every rebuild.
+## Loading the extension in Firefox (one-time)
 
-> The `--firefox=firefoxdeveloperedition` alias resolves to `C:\Program Files\Firefox Developer Edition\firefox.exe` on Windows. If you install Developer Edition somewhere else, replace the alias with an absolute path.
+1. Open Firefox Developer Edition.
+2. Navigate to `about:debugging#/runtime/this-firefox`.
+3. Click **Load Temporary Add-on…**
+4. Select `apps/extension/dist/manifest.json`.
 
-`web-ext` opens Firefox to `about:debugging#/runtime/this-firefox`. From there, click **Inspect** on the "Focus Tracker" entry to get a devtools window for the background event page. The console there is where the `[focus-tracker]` log lines appear.
+The extension now shows up in the list as **Focus Tracker**. Temporary add-ons are cleared when Firefox restarts, so you'll repeat this step once per Firefox session.
+
+## Reload cycle (every change)
+
+1. Save your source file → `vite` rebuilds `dist/` (watch mode).
+2. Go back to `about:debugging#/runtime/this-firefox`.
+3. On the Focus Tracker entry, click **Reload**.
+4. Click **Inspect** to open a devtools window for the background event page — the `[focus-tracker]` log lines appear in that console.
+
+That's the loop: save → reload in `about:debugging` → check devtools.
 
 ## Manual verification (slice 1)
 
-Once Firefox launches:
+Once the extension is loaded and you've opened the background page inspector:
 
-1. Open the inspector (above) for the background page.
-2. Switch between tabs / windows / apps — each focus transition logs a line like:
+1. Switch between tabs / windows / apps — each focus transition logs a line like:
    ```
    [focus-tracker] focus transition: github.com → news.ycombinator.com
    ```
-3. Lock your screen or step away for ≥60s — the next log line should be `→ (none)` (idle handling).
-4. Come back, do something — the next log line resumes with whatever tab is now active.
+2. Lock your screen or step away for ≥60s — the next log line should be `→ (none)` (idle handling).
+3. Come back, do something — the next log line resumes with whatever tab is now active.
 
-If those four behaviors check out, slice 1 is working.
+If those three behaviors check out, slice 1 is working.
+
+## Other scripts
+
+| Script | What it does |
+| --- | --- |
+| `pnpm build` | One-shot production build. |
+| `pnpm typecheck` | `tsc --noEmit`. |
+| `pnpm webext:lint` | Runs `web-ext lint` over `dist/`. Doesn't launch Firefox. |
+| `pnpm webext:build` | Packages `dist/` into `web-ext-artifacts/*.zip` for AMO submission (slice 5). Doesn't launch Firefox. |
 
 ## What's NOT in this slice
 

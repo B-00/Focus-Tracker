@@ -6,9 +6,7 @@
   "description": "Focus Tracker browser extension (Firefox-only, MV3 event page). See Sources Markdown/Extension.md.",
   "scripts": {
     "build": "vite build",
-    "build:watch": "vite build --watch",
-    "dev": "concurrently --kill-others --names build,firefox --prefix-colors blue,magenta \"pnpm build:watch\" \"pnpm webext:run\"",
-    "webext:run": "web-ext run --source-dir=dist --target=firefox-desktop --firefox=firefoxdeveloperedition --start-url=about:debugging#/runtime/this-firefox",
+    "dev": "vite build --watch",
     "webext:lint": "web-ext lint --source-dir=dist",
     "webext:build": "web-ext build --source-dir=dist --artifacts-dir=web-ext-artifacts --overwrite-dest",
     "typecheck": "tsc --noEmit"
@@ -18,7 +16,6 @@
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^120.0.4",
-    "concurrently": "^9.1.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
     "vite-plugin-static-copy": "^2.2.0",
