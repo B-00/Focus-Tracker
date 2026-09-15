@@ -13,6 +13,7 @@
     "dev": "pnpm --filter @focus-tracker/api --filter @focus-tracker/web --parallel run dev",
     "dev:desktop": "pnpm --filter @focus-tracker/desktop run dev",
     "dev:all": "pnpm -r --parallel run dev",
+    "dev:up": "bash scripts/dev-up.sh",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
