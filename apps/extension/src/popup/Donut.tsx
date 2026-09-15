@@ -6,6 +6,12 @@
 //
 // SVG is the right tool here: crisp at any DPI, no canvas ceremony, no
 // external chart lib. ~50 LOC beats adding a dep for this.
+//
+// ponytail: SVG attributes use kebab-case (stroke-width, stroke-dasharray,
+// stroke-dashoffset) rather than the React-style camelCase. Preact renders
+// JSX props verbatim on SVG elements, so `strokeWidth` would emit a bogus
+// attribute the browser ignores — leaving default 1px lines and no dash
+// array (visible as a thin outline circle with no segments).
 
 import type { JSX } from 'preact';
 
@@ -34,24 +40,20 @@ export function Donut({
   const cx = size / 2;
   const cy = size / 2;
 
-  // Track ring — full 360° in the "Other" color, then the segments
-  // paint over the top starting from 12 o'clock going clockwise.
-  const trackDash = circumference;
-
   let offset = 0;
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Today's time by site">
       {/* rotate -90° so the first segment starts at 12 o'clock, not 3 o'clock */}
       <g transform={`rotate(-90 ${cx} ${cy})`}>
+        {/* Track ring — full 360° in the "Other" color; segments paint over it. */}
         <circle
           cx={cx}
           cy={cy}
           r={radius}
           fill="none"
           stroke={OTHER_COLOR}
-          strokeWidth={strokeWidth}
-          strokeDasharray={`${trackDash} ${circumference}`}
+          stroke-width={strokeWidth}
         />
         {totalMs > 0 &&
           segments.map((seg, i) => {
@@ -65,9 +67,9 @@ export function Donut({
                 r={radius}
                 fill="none"
                 stroke={PALETTE[i % PALETTE.length]}
-                strokeWidth={strokeWidth}
-                strokeDasharray={`${dash} ${circumference}`}
-                strokeDashoffset={-offset}
+                stroke-width={strokeWidth}
+                stroke-dasharray={`${dash} ${circumference}`}
+                stroke-dashoffset={-offset}
               />
             );
             offset += dash;
