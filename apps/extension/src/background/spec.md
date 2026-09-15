@@ -10,11 +10,13 @@ The background **event page** is the always-on observer that watches the browser
 
 ## Files
 
-| File         | Responsibility                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------------- |
-| `index.ts`   | Event-page entrypoint. Wires `initCapture()` on every wake.                                             |
-| `capture.ts` | Listener registration + transition logic. Translates raw `tabs.*` / `windows.*` / `idle.*` events into focus transitions. |
-| `state.ts`   | In-memory current-focus tracker. Lives only within a wake cycle.                                        |
+| File            | Responsibility                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `index.ts`      | Event-page entrypoint. Wires capture + heartbeat + session on every wake. Exposes `__ft_dumpOutbox()` for devtools. |
+| `capture.ts`    | Listener registration + transition logic. Emits `focus_change` events to the outbox on every meaningful transition. |
+| `heartbeat.ts`  | `browser.alarms`-backed 30s keepalive that emits `heartbeat` events while a focus is in flight.                    |
+| `session.ts`    | Session bookkeeping in `browser.storage.local`. Emits `session_start` / `session_end` with a 30-min gap heuristic.  |
+| `state.ts`      | In-memory current-focus tracker (target + startedAt). Lives only within a wake cycle.                              |
 
 ## Lifecycle
 
@@ -42,23 +44,32 @@ On every wake:
 - Incognito / private windows: `tab.incognito === true` → drop on the floor, never emit.
 - Non-HTTP schemes: `about:`, `moz-extension:`, `file:`, `javascript:`, `data:` → drop. The desktop client tracks Firefox the application; internal browser surfaces would double-count there.
 
+## Session semantics
+
+A **session** here is one continuous stretch of browsing activity, NOT one wake of the event page. The event page wakes and sleeps constantly (~30s inactivity → sleep, any tab event → wake), so gating `session_start` on wake alone would produce dozens of sessions per real browsing spell.
+
+Rule:
+
+- Sessions live in `browser.storage.local` and persist across event-page suspend/wake.
+- Every wake, `initSession()` inspects `lastActivityAt`. If it's more than **30 minutes** in the past, the previous session is closed out (`session_end` at `lastActivityAt`) and a fresh one begins. Otherwise the same session continues silently — no wire events emitted.
+- Every `focus_change` and every heartbeat calls `touchSession()` to refresh `lastActivityAt`.
+- **No `runtime.onSuspend` handler.** Emitting `session_end` on suspend would fragment one browsing spell into dozens of tiny bookended sessions (suspend fires every ~30s of idle). If the browser is closed cleanly or crashes, the last session simply never gets a client-side `session_end`; server-side reconciliation from the last heartbeat closes it out. The desktop client already relies on this same pattern.
+
 ## What's NOT here (yet)
 
-This module currently only **logs** transitions. Slice 2 will:
-
-- Stamp each transition with a ULID + `startedAt` / `endedAt` / `durationMs`.
-- Append to the IndexedDB outbox (`outbox.ts`).
-- Emit `heartbeat` events on the alarm interval.
-- Emit `session_start` on every wake, `session_end` on `runtime.onSuspend`.
+- IndexedDB outbox HAS events flowing into it (see `../storage/outbox.ts`), but **no flusher** yet — the outbox grows unbounded until Slice 4 lands and POSTs batches to `/v1/telemetry/batch`.
+- No popup / options UI (Slice 3+).
+- No error surface — outbox write failures currently only `console.warn` in the background page devtools.
 
 ## Testing notes
 
-Slice 1 is verified manually by:
+Slice 2 is verified manually by:
 
-1. `pnpm dev` from `apps/extension/` — starts `vite build --watch` (no Firefox launch).
-2. In an already-open Firefox Developer Edition, load `apps/extension/dist/manifest.json` once via `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** (see `README.md` for the reload cycle).
-3. Open the **Inspect** window for the Focus Tracker entry to reach the background event page's devtools console.
-4. Switch between tabs/windows; observe `[focus-tracker] focus transition:` log lines.
-5. Lock the screen; verify the next log line is `→ (none)` after the 60s idle threshold.
+1. `pnpm dev` from `apps/extension/` — `vite build --watch` (no Firefox launch).
+2. In Firefox Developer Edition, load `apps/extension/dist/manifest.json` via `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** (see `README.md`).
+3. Open the **Inspect** window on the Focus Tracker entry.
+4. Browse for a minute or two: switch tabs, alt-tab to another app and back, lock the screen and unlock. `[focus-tracker] focus transition:` log lines still appear.
+5. In the Inspect console, run `await __ft_dumpOutbox()` — a `console.table` prints the queued events. Expect a mix of `focus_change`, `heartbeat`, and `session_start`. `focus_change` rows have both `startedAt` and `endedAt`.
+6. Optional: `await __ft_outboxCount()` returns the current count; `await __ft_clearOutbox()` wipes it (for a clean re-run).
 
-No unit tests in slice 1 — the logic is almost entirely Firefox API plumbing, and the integration test (steps 1–5 above) covers the meaningful behavior cheaply.
+No unit tests — the meaningful logic is Firefox API plumbing + IndexedDB, both of which are painful to fake and cheap to verify by inspection.

@@ -1,8 +1,9 @@
 // Focus-event capture from the browser's tab/window/idle APIs.
 //
-// Slice 1: emit a log line on every "what is the user looking at now?"
-// transition. Slice 2 swaps the log for an outbox append + ULID id +
-// session/idle bracketing.
+// Slice 2: every meaningful transition becomes a `focus_change` event
+// bracketed by [startedAt, endedAt] and appended to the IndexedDB outbox.
+// The console.log line kept from Slice 1 is now just a devtools aid, not
+// the data path.
 //
 // Three sources of truth, in priority order:
 //   1. `windows.onFocusChanged(WINDOW_ID_NONE)` — browser lost OS focus.
@@ -16,7 +17,11 @@
 // `idle.onStateChanged` bounds the current event but does not, itself,
 // ship a wire event (Extension.md §6.1).
 
-import { setCurrentFocus, type FocusTarget } from './state';
+import { createFocusChangeEvent } from '../events';
+import * as outbox from '../storage/outbox';
+
+import { touchSession } from './session';
+import { getCurrentFocus, setCurrentFocus, type FocusTarget } from './state';
 
 const IDLE_THRESHOLD_SECONDS = 60;
 
@@ -110,11 +115,45 @@ function handleIdleStateChanged(state: browser.idle.IdleState): void {
   void primeCurrentFocus();
 }
 
+/**
+ * Central transition point: close out the previous focus (if any) as a
+ * `focus_change` event, then swap in the new focus. Reads state before
+ * mutating so the sameness check has the right baseline.
+ */
 function transitionTo(next: FocusTarget | null): void {
-  const previous = setCurrentFocus(next);
-  if (sameTarget(previous, next)) return;
+  const now = new Date();
+  const current = getCurrentFocus();
+  const currentTarget = current?.target ?? null;
+
+  if (sameTarget(currentTarget, next)) return;
+
+  // Close out the previous focus, if any, with the transition instant.
+  if (current !== null) {
+    const event = createFocusChangeEvent({
+      domain: current.target.domain,
+      tabTitle: current.target.tabTitle,
+      startedAt: current.startedAt,
+      endedAt: now,
+    });
+    void outbox.append(event).catch((err: unknown) => {
+      // Outbox failures are non-fatal — we can't undo the state change,
+      // and losing one event is better than crashing the event page.
+      // Slice 4's flusher will surface persistent write failures via a
+      // proper error log in the popup.
+      console.warn('[focus-tracker] outbox.append failed', err);
+    });
+  }
+
+  setCurrentFocus(next, now);
+
+  // Keep the session's lastActivityAt fresh so a wake far in the future
+  // can tell whether this session is still live or has gone stale.
+  void touchSession(now).catch((err: unknown) => {
+    console.warn('[focus-tracker] touchSession failed', err);
+  });
+
   console.log(
-    `[focus-tracker] focus transition: ${formatTarget(previous)} → ${formatTarget(next)}`,
+    `[focus-tracker] focus transition: ${formatTarget(currentTarget)} → ${formatTarget(next)}`,
   );
 }
 
@@ -145,17 +184,11 @@ function deriveTarget(tab: browser.tabs.Tab): FocusTarget | null {
 
   return {
     domain,
-    // Tab title is captured for slice 2's wire payload (Extension.md §6.2
-    // → `tabTitle`). Stored alongside the domain here so the same
-    // transition decision sees both.
     tabTitle: typeof tab.title === 'string' ? tab.title : null,
   };
 }
 
-function sameTarget(
-  a: FocusTarget | null,
-  b: FocusTarget | null,
-): boolean {
+function sameTarget(a: FocusTarget | null, b: FocusTarget | null): boolean {
   if (a === null && b === null) return true;
   if (a === null || b === null) return false;
   return a.domain === b.domain && a.tabTitle === b.tabTitle;

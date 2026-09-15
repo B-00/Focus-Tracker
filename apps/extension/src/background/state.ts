@@ -3,11 +3,10 @@
 // IMPORTANT: this module's state evaporates when Firefox unloads the
 // event page. Don't rely on `currentFocus` surviving across cold starts —
 // it's a within-wake-cycle cache. Cross-wake durability lives in the
-// IndexedDB outbox (slice 2).
+// IndexedDB outbox (`../storage/outbox.ts`).
 //
-// Slice 1 uses this just to deduplicate "same tab, redundant event"
-// noise. Slice 2 will extend the record with `startedAt` so we can ship
-// `focus_change` events with `endedAt = transitionTime`.
+// Slice 2 extended the record with `startedAt` so `capture.ts` can bracket
+// each transition as a `focus_change` event with startedAt/endedAt.
 
 export interface FocusTarget {
   /// Lowercased hostname with leading "www." stripped. Stable identity
@@ -20,17 +19,26 @@ export interface FocusTarget {
   tabTitle: string | null;
 }
 
-let currentFocus: FocusTarget | null = null;
-
-/// Sets the new current focus and returns the previous value. The
-/// caller is responsible for deciding whether the transition is
-/// meaningful (capture.ts compares with `sameTarget`).
-export function setCurrentFocus(next: FocusTarget | null): FocusTarget | null {
-  const previous = currentFocus;
-  currentFocus = next;
-  return previous;
+export interface FocusEntry {
+  target: FocusTarget;
+  /// Wall-clock moment we transitioned INTO this target. Used as the
+  /// `startedAt` of the focus_change event we'll emit when we transition
+  /// out again.
+  startedAt: Date;
 }
 
-export function getCurrentFocus(): FocusTarget | null {
+let currentFocus: FocusEntry | null = null;
+
+/**
+ * Replace the current focus with `next` (or null if unfocused). Timestamp
+ * `startedAt` is captured by the caller and passed in so that the moment
+ * used to close out the previous focus and the moment used to open the
+ * next one are exactly the same instant (no drift from two `new Date()` calls).
+ */
+export function setCurrentFocus(next: FocusTarget | null, startedAt: Date): void {
+  currentFocus = next === null ? null : { target: next, startedAt };
+}
+
+export function getCurrentFocus(): FocusEntry | null {
   return currentFocus;
 }

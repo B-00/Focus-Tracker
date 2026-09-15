@@ -15,7 +15,11 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": false,
-    "allowImportingTsExtensions": false,
+    // `.ts` extensions are opt-in per import. Regular source imports omit
+    // them (convention); Node-runnable self-check scripts like
+    // `ulid.check.ts` need them since Node's --experimental-strip-types
+    // loader requires the real filename.
+    "allowImportingTsExtensions": true,
     "noEmit": true,
     "types": ["firefox-webext-browser", "node"]
   },
