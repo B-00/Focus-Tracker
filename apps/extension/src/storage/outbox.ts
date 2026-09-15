@@ -88,6 +88,58 @@ export async function count(): Promise<number> {
 }
 
 /**
+ * Read the head of the outbox — up to `limit` events, in primary-key
+ * (ULID) order, which is time-of-generation order. Used by the flusher
+ * to build one batch per iteration.
+ *
+ * ponytail: we could `getAll(query, count)` in one shot — but the
+ * `IDBKeyRange` argument is required in Firefox for the two-arg form,
+ * and a cursor with `advance/continue` keeps the code trivially
+ * correct while still bounding memory to `limit` events.
+ */
+export async function getBatch(limit: number): Promise<TelemetryEvent[]> {
+  if (limit <= 0) return [];
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const store = tx.objectStore(STORE);
+    const req = store.openCursor();
+    const out: TelemetryEvent[] = [];
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (cursor === null || out.length >= limit) {
+        resolve(out);
+        return;
+      }
+      out.push(cursor.value as TelemetryEvent);
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('IDB transaction aborted'));
+  });
+}
+
+/**
+ * Delete the given events from the outbox. Called after a successful
+ * flush to ack the batch, and after a permanent-reject to dead-letter it.
+ * All deletes run inside one transaction so a mid-flight failure either
+ * removes everything or nothing.
+ */
+export async function removeMany(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    for (const id of ids) store.delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('IDB transaction aborted'));
+  });
+}
+
+/**
  * Delete every event in the outbox. Not used in normal operation — this
  * is here for the devtools helper `__ft_clearOutbox()` so we can reset
  * local state during manual testing without opening the IDB inspector.

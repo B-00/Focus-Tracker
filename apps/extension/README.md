@@ -56,7 +56,20 @@ If those three behaviors check out, slice 1 is working.
 | `pnpm webext:lint` | Runs `web-ext lint` over `dist/`. Doesn't launch Firefox. |
 | `pnpm webext:build` | Packages `dist/` into `web-ext-artifacts/*.zip` for AMO submission (slice 5). Doesn't launch Firefox. |
 
+## Self-checks
+
+Standalone assertion scripts you can run without any test runner:
+
+```bash
+# ULID generator (26-char alphabet + monotonicity on a 1000-id burst)
+node --experimental-strip-types apps/extension/src/id/ulid.check.ts
+
+# Flusher drain loop (all five branch outcomes with in-memory fakes)
+node --experimental-strip-types apps/extension/src/background/flusher.check.ts
+```
+
+Each exits non-zero on any regression.
+
 ## What's NOT in this slice
 
-- Flusher to the API (slice 4)
 - Options page, error log, icons, AMO packaging (slice 5)

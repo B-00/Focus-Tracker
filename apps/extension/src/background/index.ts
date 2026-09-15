@@ -17,6 +17,7 @@
 import * as outbox from '../storage/outbox';
 
 import { initCapture } from './capture';
+import { flushAll, initFlusher } from './flusher';
 import { initHeartbeat } from './heartbeat';
 import { initSession } from './session';
 
@@ -24,6 +25,7 @@ console.log('[focus-tracker] background event page waking');
 
 initCapture();
 initHeartbeat();
+initFlusher();
 void initSession().catch((err: unknown) => {
   console.warn('[focus-tracker] initSession failed', err);
 });
@@ -38,6 +40,7 @@ declare global {
     __ft_dumpOutbox?: () => Promise<void>;
     __ft_clearOutbox?: () => Promise<void>;
     __ft_outboxCount?: () => Promise<number>;
+    __ft_flushNow?: () => Promise<unknown>;
   }
 }
 (globalThis as unknown as Window).__ft_dumpOutbox = async () => {
@@ -58,4 +61,9 @@ declare global {
 (globalThis as unknown as Window).__ft_clearOutbox = async () => {
   await outbox.clear();
   console.log('[focus-tracker] outbox cleared');
+};
+(globalThis as unknown as Window).__ft_flushNow = async () => {
+  const summary = await flushAll();
+  console.log('[focus-tracker] flush summary', summary);
+  return summary;
 };

@@ -12,11 +12,13 @@ The background **event page** is the always-on observer that watches the browser
 
 | File            | Responsibility                                                                                                     |
 | --------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `index.ts`      | Event-page entrypoint. Wires capture + heartbeat + session on every wake. Exposes `__ft_dumpOutbox()` for devtools. |
+| `index.ts`      | Event-page entrypoint. Wires capture + heartbeat + session + flusher on every wake. Exposes `__ft_*` devtools helpers. |
 | `capture.ts`    | Listener registration + transition logic. Emits `focus_change` events to the outbox on every meaningful transition. |
 | `heartbeat.ts`  | `browser.alarms`-backed 30s keepalive that emits `heartbeat` events while a focus is in flight.                    |
 | `session.ts`    | Session bookkeeping in `browser.storage.local`. Emits `session_start` / `session_end` with a 30-min gap heuristic.  |
 | `state.ts`      | In-memory current-focus tracker (target + startedAt). Lives only within a wake cycle.                              |
+| `flusher.ts`    | Browser wiring — `browser.alarms` (60s) → `runDrain()` with live IndexedDB / fetch / storage implementations.       |
+| `drain.ts`      | Pure drain-loop orchestration behind a `FlushDeps` interface. No browser API touches — testable in plain Node.      |
 
 ## Lifecycle
 
@@ -55,11 +57,32 @@ Rule:
 - Every `focus_change` and every heartbeat calls `touchSession()` to refresh `lastActivityAt`.
 - **No `runtime.onSuspend` handler.** Emitting `session_end` on suspend would fragment one browsing spell into dozens of tiny bookended sessions (suspend fires every ~30s of idle). If the browser is closed cleanly or crashes, the last session simply never gets a client-side `session_end`; server-side reconciliation from the last heartbeat closes it out. The desktop client already relies on this same pattern.
 
+## Flusher
+
+`flusher.ts` + `drain.ts` implement Extension.md §8 — every 60s, `browser.alarms` wakes the event page and `runDrain()` walks the outbox in 50-event chunks (`BATCH_SIZE`, matching `telemetryBatchSchema.events.max(50)`).
+
+Per-batch outcome table (mirrors `apps/desktop/src-tauri/src/flusher.rs`):
+
+| API response                          | Effect on outbox     | Effect on loop        | Effect on client         |
+| ------------------------------------- | -------------------- | --------------------- | ------------------------ |
+| 2xx `{acceptedCount, duplicateCount}` | delete acked batch   | continue to next chunk | log info                 |
+| 5xx / network / timeout / parse       | leave intact         | exit, retry next tick | log warn                 |
+| 401 / 403                             | leave intact         | exit                  | `forgetPairedDevice()` → popup drops to PairingView |
+| 4xx (other)                           | delete anyway (v1 dead-letter) | continue      | log error loudly         |
+
+Design notes:
+
+- **Alarm-only trigger**, no queue-depth signal. Human-paced input + 60s buffering is invisible in practice; one code path is simpler. `ponytail:` if the outbox ever grows past ~1k events between ticks we'd add a poke-on-append signal like the desktop's `Notify`.
+- `MAX_CHUNKS_PER_TICK = 20` caps runtime at ~1000 events per wake so a pathological outbox can't monopolise the event page.
+- **No client-side NUL-byte stripping.** The API strips them in `TelemetryService.ingest()`, so the extension can send raw bodies and rely on the server-side sanitiser.
+- **Idempotency** is free: outbox key = event ULID = API dedup key. A retry after a crash-between-upload-and-delete just returns `duplicateCount = N` on the next attempt.
+- **Testability** is why the pure logic lives in `drain.ts` behind a `FlushDeps` interface. `flusher.check.ts` exercises all five branches (multi-chunk drain, transient, auth-rejected, permanent, unpaired) in plain Node with in-memory fakes — no IndexedDB, no fetch, no `browser.*`.
+
 ## What's NOT here (yet)
 
-- IndexedDB outbox HAS events flowing into it (see `../storage/outbox.ts`), but **no flusher** yet — the outbox grows unbounded until Slice 4 lands and POSTs batches to `/v1/telemetry/batch`.
 - No options page (Slice 5). The popup (`../popup/`) exists as of Slice 3 for pairing + local stats view.
-- No error surface — outbox write failures currently only `console.warn` in the background page devtools.
+- No error surface — flush failures currently only `console.{info,warn,error}` in the background page devtools. Permanent-reject events are dropped rather than moved to a dead-letter store (v1 behaviour).
+- No queue-depth-triggered flush — see design notes above.
 
 ## Testing notes
 
@@ -72,4 +95,18 @@ Slice 2 is verified manually by:
 5. In the Inspect console, run `await __ft_dumpOutbox()` — a `console.table` prints the queued events. Expect a mix of `focus_change`, `heartbeat`, and `session_start`. `focus_change` rows have both `startedAt` and `endedAt`.
 6. Optional: `await __ft_outboxCount()` returns the current count; `await __ft_clearOutbox()` wipes it (for a clean re-run).
 
-No unit tests — the meaningful logic is Firefox API plumbing + IndexedDB, both of which are painful to fake and cheap to verify by inspection.
+Slice 4 verification adds:
+
+7. Pair the extension via the popup (Slice 3) so `apiKey` is in `browser.storage.local`.
+8. Browse for a minute or two so the outbox has ~10+ events.
+9. In the background page console, run `await __ft_flushNow()`. It returns a `FlushSummary` and logs one `flush ok` line per chunk. `__ft_outboxCount()` should read 0 afterwards.
+10. Cross-check on the web dashboard — the events should appear in the activity view for the paired Firefox device.
+11. Kill the API (`docker compose stop api` or similar), run `__ft_flushNow()` again: summary comes back `transient`, outbox count is unchanged. Restart the API and the next 60s alarm tick drains it.
+
+The pure drain logic has an assert-based self-check:
+
+```
+node --experimental-strip-types apps/extension/src/background/flusher.check.ts
+```
+
+Runs 5 in-memory scenarios (multi-chunk drain, transient, auth-rejected, permanent-reject, unpaired) and exits non-zero on any regression.
