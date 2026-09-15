@@ -15,7 +15,9 @@
     "@focus-tracker/shared": "workspace:*"
   },
   "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
     "@types/firefox-webext-browser": "^120.0.4",
+    "preact": "^10.29.8",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
     "vite-plugin-static-copy": "^2.2.0",

@@ -58,7 +58,5 @@ If those three behaviors check out, slice 1 is working.
 
 ## What's NOT in this slice
 
-- IndexedDB outbox (slice 2)
-- Pairing UI / popup (slice 3)
 - Flusher to the API (slice 4)
 - Options page, error log, icons, AMO packaging (slice 5)

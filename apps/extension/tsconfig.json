@@ -21,6 +21,10 @@
     // loader requires the real filename.
     "allowImportingTsExtensions": true,
     "noEmit": true,
+    // JSX with Preact's automatic runtime — matches what @preact/preset-vite
+    // configures at bundle time.
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
     "types": ["firefox-webext-browser", "node"]
   },
   "include": ["src/**/*", "vite.config.ts"],

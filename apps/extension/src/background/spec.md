@@ -58,7 +58,7 @@ Rule:
 ## What's NOT here (yet)
 
 - IndexedDB outbox HAS events flowing into it (see `../storage/outbox.ts`), but **no flusher** yet — the outbox grows unbounded until Slice 4 lands and POSTs batches to `/v1/telemetry/batch`.
-- No popup / options UI (Slice 3+).
+- No options page (Slice 5). The popup (`../popup/`) exists as of Slice 3 for pairing + local stats view.
 - No error surface — outbox write failures currently only `console.warn` in the background page devtools.
 
 ## Testing notes

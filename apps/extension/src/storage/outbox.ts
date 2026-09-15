@@ -95,3 +95,55 @@ export async function count(): Promise<number> {
 export async function clear(): Promise<void> {
   await transact('readwrite', (s) => s.clear());
 }
+
+// ─── stats aggregation (used by the popup) ─────────────────────────────────
+
+export interface DomainTotal {
+  domain: string;
+  durationMs: number;
+}
+
+/**
+ * Group today's `focus_change` events by `target.domain` and sum
+ * `durationMs`, returning an array sorted descending. "Today" means
+ * "since local midnight of the caller's clock" — we deliberately use
+ * wall-clock day boundaries so the number matches what the user
+ * intuitively means by "today".
+ *
+ * Heartbeats and session events are ignored — heartbeats have no
+ * duration and would double-count against the parent focus_change, and
+ * session events aren't per-domain.
+ *
+ * The currently-in-flight focus (which hasn't emitted its close-out
+ * focus_change yet) is added by the caller via `interpolateCurrent()` —
+ * this function only knows about what's in the store.
+ *
+ * ponytail: linear scan of the outbox. For a personal-use extension
+ * with ~O(hundreds) of events/day this is instant. If the outbox ever
+ * grows past ~10k events we'd add a `startedAt` index and do a range
+ * scan instead.
+ */
+export async function sumTodayByDomain(): Promise<DomainTotal[]> {
+  const startOfToday = startOfLocalDay(new Date()).toISOString();
+  const events = await listAll();
+
+  const totals = new Map<string, number>();
+  for (const e of events) {
+    if (e.kind !== 'focus_change') continue;
+    if (e.startedAt < startOfToday) continue;
+    const domain = typeof e.target.domain === 'string' ? e.target.domain : null;
+    if (!domain) continue;
+    const durationMs = typeof e.durationMs === 'number' ? e.durationMs : 0;
+    totals.set(domain, (totals.get(domain) ?? 0) + durationMs);
+  }
+
+  return [...totals.entries()]
+    .map(([domain, durationMs]) => ({ domain, durationMs }))
+    .sort((a, b) => b.durationMs - a.durationMs);
+}
+
+function startOfLocalDay(d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  return out;
+}

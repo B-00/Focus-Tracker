@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=360, initial-scale=1" />
+    <title>Focus Tracker</title>
+    <!--
+      Popup entry. Firefox loads this file via `action.default_popup` in
+      manifest.json when the user clicks the toolbar icon. Vite processes
+      this HTML as an entry point and rewrites the src="/src/popup/..."
+      into the bundled artifact under dist/.
+    -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/popup/index.tsx"></script>
+  </body>
+</html>

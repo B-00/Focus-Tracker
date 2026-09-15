@@ -1,0 +1,229 @@
+/* Popup styles.
+ *
+ * Firefox opens the popup with `body` sized to `html` content, capped
+ * at 800×600. We aim for ~360px wide to feel like a compact tool, not
+ * a webpage. Colors match the Focus Tracker dark theme in apps/web
+ * (bg #0f1420 / accent #10ffcb / muted text #94a3b8).
+ */
+
+:root {
+  --bg: #0f1420;
+  --panel: #171e2e;
+  --border: #1f2a3d;
+  --text: #e4e9f2;
+  --text-muted: #94a3b8;
+  --accent: #10ffcb;
+  --danger: #f87171;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+body {
+  width: 360px;
+}
+
+.app {
+  padding: 0;
+}
+
+.app-loading,
+.app__title {
+  padding: 12px 16px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ─── Pairing view ─────────────────────────────────────────────────── */
+
+.pair-wait,
+.pair-loading,
+.pair-error,
+.pair-claimed {
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.pair-instructions {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+}
+
+.pair-code {
+  font: 700 32px/1 'SFMono-Regular', Consolas, Menlo, monospace;
+  letter-spacing: 6px;
+  color: var(--accent);
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 0 0 12px;
+  /* Prevent the digits from being auto-selected-and-copied when the
+   * popup opens; user might want to just read it aloud. */
+  user-select: text;
+}
+
+.pair-hint {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pair-hint em {
+  font-style: normal;
+  color: var(--text);
+}
+
+.pair-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pair-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  /* Slow pulse so the user knows the polling loop is alive. */
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.pair-error__msg {
+  color: var(--danger);
+  margin: 0 0 12px;
+}
+
+.pair-btn,
+.stats__btn {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pair-btn:hover,
+.stats__btn:hover {
+  border-color: var(--accent);
+}
+
+/* ─── Stats view ───────────────────────────────────────────────────── */
+
+.stats {
+  display: flex;
+  flex-direction: column;
+}
+
+.stats__header {
+  padding: 8px 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats__loading,
+.stats__empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.stats__empty-hint {
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.stats__chart {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 4px;
+}
+
+.stats__total {
+  text-align: center;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+
+.stats__total strong {
+  color: var(--text);
+}
+
+.stats__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px;
+  border-top: 1px solid var(--border);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.stats__row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats__row:last-child {
+  border-bottom: none;
+}
+
+.stats__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.stats__domain {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats__pct {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.stats__dur {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  min-width: 60px;
+  text-align: right;
+}
+
+.stats__footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}

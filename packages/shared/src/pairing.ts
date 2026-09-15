@@ -106,5 +106,6 @@ export const PAIRING_ERROR_CODES = [
   'pairing_code_already_claimed', // claim called twice
   'pairing_code_pending', // poll while not yet claimed (also signalled by status=pending — see §poll response)
   'device_not_found', // DELETE /devices/{id} for unknown id
+  'device_already_paired', // POST /pairing-codes with a deviceId that already has a Device row
 ] as const;
 export type PairingErrorCode = (typeof PAIRING_ERROR_CODES)[number];
