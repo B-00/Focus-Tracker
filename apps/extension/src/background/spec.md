@@ -20,6 +20,8 @@ The background **event page** is the always-on observer that watches the browser
 | `flusher.ts`    | Browser wiring — `browser.alarms` (60s) → `runDrain()` with live IndexedDB / fetch / storage implementations.       |
 | `drain.ts`      | Pure drain-loop orchestration behind a `FlushDeps` interface. No browser API touches — testable in plain Node.      |
 
+The `capture.ts` transition path also writes to the daily rollup in `../storage/rollup.ts` on every `focus_change` close-out. That rollup is what the popup's Stats view reads, because the flusher deletes acked outbox events and an outbox scan would only see the last ~60s of browsing.
+
 ## Lifecycle
 
 Firefox MV3 unloads the event page after periods of inactivity. State that must survive a sleep cycle lives in IndexedDB or `browser.storage.local`. There is no in-process cache that survives suspension.

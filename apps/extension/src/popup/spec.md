@@ -60,16 +60,17 @@ If a user somehow gets into the wedged state (paired server-side, no local key),
 
 ## Stats aggregation
 
-`StatsView.tsx` calls `sumTodayByDomain()` from `../storage/outbox.ts`:
+`StatsView.tsx` calls `getSnapshot()` from `../storage/rollup.ts`:
 
-1. Scan every event in the outbox where `kind === 'focus_change'` and `startedAt >= startOfLocalDay(now)`.
-2. Group by `target.domain`, sum `durationMs`.
-3. Sort desc, take top 5.
-4. Anything beyond top 5 rolls up into "Other".
+1. Reads the `dailyRollup` key from `browser.storage.local`.
+2. If the stored `date` matches today's local `YYYY-MM-DD`, returns the per-domain totals sorted descending; otherwise returns an empty snapshot.
+3. StatsView takes the top 5 and rolls anything else into "Other".
 
-Heartbeats and session events are ignored — heartbeats have no durations of their own and would double-count against the parent focus_change.
+The rollup is populated by `capture.ts` on every `focus_change` close-out (see `background/spec.md` § Flusher + Rollup). Heartbeats and session events don't touch the rollup — heartbeats have no duration and would double-count against the parent focus_change; sessions aren't per-domain.
 
-**Currently in-flight focus** (the tab the user is on RIGHT NOW, no close-out event emitted yet) is NOT interpolated in Slice 3 — the number rounds up on the next transition. Slice 4 or 5 can add real-time interpolation by reading the in-memory `getCurrentFocus()` state via a message.
+**Why not just read the IndexedDB outbox** (as Slice 3 originally did)? Slice 4's flusher drains the outbox every 60s and deletes acked events, so an outbox scan only ever sees the last minute of browsing. The rollup is a parallel structure that survives flushes.
+
+**Currently in-flight focus** (the tab the user is on RIGHT NOW, no close-out event emitted yet) is NOT interpolated in the popup — the number rounds up on the next transition. Slice 5 can add real-time interpolation by persisting the current focus to storage and adding `(now − startedAt)` in StatsView.
 
 ## CORS
 

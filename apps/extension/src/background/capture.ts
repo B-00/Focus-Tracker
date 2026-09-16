@@ -19,6 +19,7 @@
 
 import { createFocusChangeEvent } from '../events';
 import * as outbox from '../storage/outbox';
+import * as rollup from '../storage/rollup';
 
 import { touchSession } from './session';
 import { getCurrentFocus, setCurrentFocus, type FocusTarget } from './state';
@@ -142,6 +143,15 @@ function transitionTo(next: FocusTarget | null): void {
       // proper error log in the popup.
       console.warn('[focus-tracker] outbox.append failed', err);
     });
+    // Parallel update to the durable daily rollup that powers the
+    // popup's Stats view. Independent of the outbox because the flusher
+    // deletes acked outbox events but the popup still needs today's
+    // history to persist. See ../storage/rollup.ts.
+    void rollup
+      .addTime(current.target.domain, event.durationMs ?? 0)
+      .catch((err: unknown) => {
+        console.warn('[focus-tracker] rollup.addTime failed', err);
+      });
   }
 
   setCurrentFocus(next, now);

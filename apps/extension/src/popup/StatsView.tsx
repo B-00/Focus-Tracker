@@ -1,9 +1,15 @@
 // "Paired" popup screen — today's browsing at a glance.
 //
-// Reads directly from the local IndexedDB outbox (no API dependency).
-// Once Slice 4's flusher lands, this same data is also uploaded to the
-// API, so eventually the web dashboard and this popup will agree — but
-// the popup keeps working even offline or before the flusher has run.
+// Reads from the durable daily rollup in `browser.storage.local`
+// (`../storage/rollup.ts`). Rollup accumulates on every focus_change
+// close-out and survives outbox flushes, so the view shows the whole
+// day even after the flusher ships events to the API. Rollup resets
+// at local midnight.
+//
+// Rollup is a local convenience only; the API is authoritative. If the
+// user clears storage or reinstalls, the rollup starts empty but the
+// real numbers are safely on the server and visible on the web
+// dashboard.
 
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { JSX } from 'preact';
@@ -12,7 +18,7 @@ import { Donut } from './Donut';
 import { OTHER_COLOR, PALETTE } from './palette';
 import type { PairedDevice } from '../storage/device';
 import { getApiBaseUrl } from '../storage/device';
-import { sumTodayByDomain, type DomainTotal } from '../storage/outbox';
+import { getSnapshot, type RollupSnapshot } from '../storage/rollup';
 
 const TOP_N = 5;
 
@@ -21,12 +27,12 @@ interface StatsViewProps {
 }
 
 export function StatsView({ device }: StatsViewProps): JSX.Element {
-  const [totals, setTotals] = useState<DomainTotal[] | null>(null);
+  const [snapshot, setSnapshot] = useState<RollupSnapshot | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void sumTodayByDomain().then((rows) => {
-      if (!cancelled) setTotals(rows);
+    void getSnapshot().then((snap) => {
+      if (!cancelled) setSnapshot(snap);
     });
     return () => {
       cancelled = true;
@@ -34,12 +40,11 @@ export function StatsView({ device }: StatsViewProps): JSX.Element {
   }, []);
 
   const view = useMemo(() => {
-    if (totals === null) return null;
-    const grandTotalMs = totals.reduce((sum, t) => sum + t.durationMs, 0);
-    const top = totals.slice(0, TOP_N);
-    const restMs = totals.slice(TOP_N).reduce((sum, t) => sum + t.durationMs, 0);
-    return { top, restMs, grandTotalMs };
-  }, [totals]);
+    if (snapshot === null) return null;
+    const top = snapshot.totals.slice(0, TOP_N);
+    const restMs = snapshot.totals.slice(TOP_N).reduce((sum, t) => sum + t.durationMs, 0);
+    return { top, restMs, grandTotalMs: snapshot.totalMs };
+  }, [snapshot]);
 
   return (
     <div class="stats">
@@ -47,7 +52,7 @@ export function StatsView({ device }: StatsViewProps): JSX.Element {
         <span class="stats__label">🟢 Live · {device.label}</span>
       </header>
 
-      {totals === null ? (
+      {snapshot === null ? (
         <div class="stats__loading">Loading…</div>
       ) : view!.grandTotalMs === 0 ? (
         <div class="stats__empty">

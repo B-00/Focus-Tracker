@@ -15,6 +15,7 @@
 // Spec: ../../../Sources Markdown/Extension.md §5, §6.
 
 import * as outbox from '../storage/outbox';
+import * as rollup from '../storage/rollup';
 
 import { initCapture } from './capture';
 import { flushAll, initFlusher } from './flusher';
@@ -41,6 +42,8 @@ declare global {
     __ft_clearOutbox?: () => Promise<void>;
     __ft_outboxCount?: () => Promise<number>;
     __ft_flushNow?: () => Promise<unknown>;
+    __ft_dumpRollup?: () => Promise<void>;
+    __ft_clearRollup?: () => Promise<void>;
   }
 }
 (globalThis as unknown as Window).__ft_dumpOutbox = async () => {
@@ -66,4 +69,15 @@ declare global {
   const summary = await flushAll();
   console.log('[focus-tracker] flush summary', summary);
   return summary;
+};
+(globalThis as unknown as Window).__ft_dumpRollup = async () => {
+  const snap = await rollup.getSnapshot();
+  console.table(snap.totals);
+  console.log(
+    `[focus-tracker] rollup for ${snap.date}: ${snap.totals.length} domain(s), total ${snap.totalMs}ms`,
+  );
+};
+(globalThis as unknown as Window).__ft_clearRollup = async () => {
+  await rollup.clearRollup();
+  console.log('[focus-tracker] rollup cleared');
 };
