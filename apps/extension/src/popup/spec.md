@@ -70,7 +70,14 @@ The rollup is populated by `capture.ts` on every `focus_change` close-out (see `
 
 **Why not just read the IndexedDB outbox** (as Slice 3 originally did)? Slice 4's flusher drains the outbox every 60s and deletes acked events, so an outbox scan only ever sees the last minute of browsing. The rollup is a parallel structure that survives flushes.
 
-**Currently in-flight focus** (the tab the user is on RIGHT NOW, no close-out event emitted yet) is NOT interpolated in the popup — the number rounds up on the next transition. Slice 5 can add real-time interpolation by persisting the current focus to storage and adding `(now − startedAt)` in StatsView.
+**Currently in-flight focus** (the tab the user is on RIGHT NOW, no close-out event emitted yet) IS interpolated. `state.ts` write-throughs `currentFocus` to `browser.storage.local` on every transition; `StatsView.tsx` reads it via `readPersistedCurrentFocus()` and adds `(now − startedAt)` to that domain's total. A 1-second interval keeps the display counting up while the popup is open, unless the extension is paused, in which case interpolation freezes.
+
+## Header signals
+
+The stats header carries two live indicators alongside the device label:
+
+- **Live / Paused pip** — reflects `preferences.paused`. The `Pause` button in the footer toggles this via `setPaused()`, which fires `storage.onChanged` for the background page to pick up (no messaging plumbing needed).
+- **API-reachability pill** — reads `apiHealth` from storage (written by the flusher). If the stored status is missing or > 5 min old on popup open, a cheap `HEAD /v1/health` probe fires to freshen it. Reachable is silent (no news = good news); only `API unreachable` renders, with the underlying message as a `title` tooltip.
 
 ## CORS
 

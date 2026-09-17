@@ -19,12 +19,18 @@
 
 import { createFocusChangeEvent } from '../events';
 import * as outbox from '../storage/outbox';
+import { getPreferences, subscribePreferences } from '../storage/preferences';
 import * as rollup from '../storage/rollup';
 
 import { touchSession } from './session';
 import { getCurrentFocus, setCurrentFocus, type FocusTarget } from './state';
 
 const IDLE_THRESHOLD_SECONDS = 60;
+
+// In-memory mirror of `preferences.paused`. Kept fresh via
+// `subscribePreferences` so `transitionTo` (a synchronous hot path)
+// can consult it without an async storage read on every event.
+let paused = false;
 
 export function initCapture(): void {
   // The idle detector kicks in after this many seconds of no input.
@@ -37,6 +43,25 @@ export function initCapture(): void {
   browser.tabs.onActivated.addListener(handleTabActivated);
   browser.tabs.onUpdated.addListener(handleTabUpdated);
   browser.idle.onStateChanged.addListener(handleIdleStateChanged);
+
+  // Preferences sync — read once at wake, then subscribe. The subscribe
+  // handler also runs the pause-boundary side effects (close out
+  // in-flight focus when pausing, re-prime when unpausing).
+  void getPreferences().then((prefs) => {
+    paused = prefs.paused;
+  });
+  subscribePreferences((prefs) => {
+    const wasPaused = paused;
+    paused = prefs.paused;
+    if (paused && !wasPaused) {
+      // Transitioning INTO paused: close out the in-flight focus so its
+      // remaining duration doesn't get credited to the pause interval.
+      transitionTo(null);
+    } else if (!paused && wasPaused) {
+      // Transitioning OUT of paused: re-resolve where the user is now.
+      void primeCurrentFocus();
+    }
+  });
 
   // Wake-time bootstrap: there's already a focused window and active
   // tab when the event page wakes, but we missed the events that put
@@ -122,6 +147,12 @@ function handleIdleStateChanged(state: browser.idle.IdleState): void {
  * mutating so the sameness check has the right baseline.
  */
 function transitionTo(next: FocusTarget | null): void {
+  // Paused: refuse to open a NEW focus, but still allow transitions
+  // TO null (idle handling, or the pause-boundary close-out itself).
+  // Without this, unpausing after an hour would credit that whole hour
+  // to whatever domain was active when pause was hit.
+  if (paused && next !== null) return;
+
   const now = new Date();
   const current = getCurrentFocus();
   const currentTarget = current?.target ?? null;

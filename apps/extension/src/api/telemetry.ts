@@ -80,3 +80,19 @@ async function safeText(res: Response): Promise<string> {
     return '<no body>';
   }
 }
+
+/**
+ * Cheap reachability probe. Used by the popup on open when the stored
+ * reachability status (updated by the flusher) is missing or stale.
+ * Requires no auth — the API's `/v1/health` endpoint is unguarded.
+ */
+export async function probeHealth(): Promise<{ reachable: boolean; message?: string }> {
+  const url = `${await getApiBaseUrl()}/v1/health`;
+  try {
+    const res = await fetch(url, { method: 'GET', credentials: 'omit' });
+    if (res.ok) return { reachable: true };
+    return { reachable: false, message: `${res.status}` };
+  } catch (err) {
+    return { reachable: false, message: (err as Error).message };
+  }
+}

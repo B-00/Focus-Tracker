@@ -1,55 +1,138 @@
 // "Paired" popup screen — today's browsing at a glance.
 //
-// Reads from the durable daily rollup in `browser.storage.local`
-// (`../storage/rollup.ts`). Rollup accumulates on every focus_change
-// close-out and survives outbox flushes, so the view shows the whole
-// day even after the flusher ships events to the API. Rollup resets
-// at local midnight.
+// Reads:
+//   * daily rollup → today's per-domain totals (see ../storage/rollup.ts)
+//   * currentFocus → live "on X right now" interpolation
+//   * paused pref  → grays out the header + toggles button label
+//   * health       → API-reachability pill in the header
 //
-// Rollup is a local convenience only; the API is authoritative. If the
-// user clears storage or reinstalls, the rollup starts empty but the
-// real numbers are safely on the server and visible on the web
-// dashboard.
+// The rollup accumulates on every focus_change close-out, but the tab
+// the user is on RIGHT NOW hasn't emitted its close-out yet — its time
+// would be missing from the totals. `interpolateCurrentFocus()` adds
+// `(now − startedAt)` for that domain and re-sorts, so the number the
+// user sees matches the reality of "I've been on youtube for 30 min."
+// A 1-second interval keeps the display counting up while the popup
+// is open.
 
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { JSX } from 'preact';
 
-import { Donut } from './Donut';
-import { OTHER_COLOR, PALETTE } from './palette';
+import { probeHealth } from '../api/telemetry';
 import type { PairedDevice } from '../storage/device';
 import { getApiBaseUrl } from '../storage/device';
-import { getSnapshot, type RollupSnapshot } from '../storage/rollup';
+import {
+  getHealth,
+  isStale,
+  setHealth,
+  type HealthStatus,
+} from '../storage/health';
+import {
+  getPreferences,
+  setPaused,
+  subscribePreferences,
+  type Preferences,
+} from '../storage/preferences';
+import { getSnapshot, type DomainTotal, type RollupSnapshot } from '../storage/rollup';
+import { readPersistedCurrentFocus } from '../background/state';
+import { Donut } from './Donut';
+import { OTHER_COLOR, PALETTE } from './palette';
 
 const TOP_N = 5;
+const LIVE_TICK_MS = 1000;
 
 interface StatsViewProps {
   device: PairedDevice;
 }
 
+interface LiveFocus {
+  domain: string;
+  startedAt: Date;
+}
+
 export function StatsView({ device }: StatsViewProps): JSX.Element {
   const [snapshot, setSnapshot] = useState<RollupSnapshot | null>(null);
+  const [liveFocus, setLiveFocus] = useState<LiveFocus | null>(null);
+  const [prefs, setPrefs] = useState<Preferences>({ paused: false });
+  const [health, setHealthState] = useState<HealthStatus | 'checking' | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
+  // ─── one-shot loads on mount ─────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-    void getSnapshot().then((snap) => {
-      if (!cancelled) setSnapshot(snap);
+    void Promise.all([
+      getSnapshot(),
+      readPersistedCurrentFocus(),
+      getPreferences(),
+      getHealth(),
+    ]).then(([snap, focus, p, h]) => {
+      if (cancelled) return;
+      setSnapshot(snap);
+      setLiveFocus(
+        focus === null
+          ? null
+          : { domain: focus.target.domain, startedAt: focus.startedAt },
+      );
+      setPrefs(p);
+      setHealthState(h);
+      // If the stored reachability is missing/stale, kick off a fresh
+      // HEAD probe so the pill isn't blank on first open.
+      if (isStale(h)) {
+        setHealthState('checking');
+        void probeHealth().then((probe) => {
+          if (cancelled) return;
+          const fresh: HealthStatus = {
+            reachable: probe.reachable,
+            checkedAt: new Date().toISOString(),
+            ...(probe.message !== undefined ? { message: probe.message } : {}),
+          };
+          void setHealth(fresh);
+          setHealthState(fresh);
+        });
+      }
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
+  // ─── live-tick for the current-focus interpolation ───────────────────
+  useEffect(() => {
+    if (liveFocus === null || prefs.paused) return;
+    const id = window.setInterval(() => setNow(Date.now()), LIVE_TICK_MS);
+    return () => window.clearInterval(id);
+  }, [liveFocus?.domain, liveFocus?.startedAt.getTime(), prefs.paused]);
+
+  // ─── react to background pref changes (e.g. pause via keyboard shortcut) ─
+  useEffect(() => subscribePreferences(setPrefs), []);
+
+  // ─── derived view ────────────────────────────────────────────────────
   const view = useMemo(() => {
     if (snapshot === null) return null;
-    const top = snapshot.totals.slice(0, TOP_N);
-    const restMs = snapshot.totals.slice(TOP_N).reduce((sum, t) => sum + t.durationMs, 0);
-    return { top, restMs, grandTotalMs: snapshot.totalMs };
-  }, [snapshot]);
+    const interpolated = interpolateCurrentFocus(
+      snapshot.totals,
+      liveFocus,
+      prefs.paused ? 0 : now,
+    );
+    const grandTotalMs = interpolated.reduce((sum, t) => sum + t.durationMs, 0);
+    const top = interpolated.slice(0, TOP_N);
+    const restMs = interpolated.slice(TOP_N).reduce((sum, t) => sum + t.durationMs, 0);
+    return { top, restMs, grandTotalMs };
+  }, [snapshot, liveFocus, now, prefs.paused]);
+
+  const togglePaused = async (): Promise<void> => {
+    const next = !prefs.paused;
+    setPrefs({ ...prefs, paused: next });
+    await setPaused(next);
+  };
 
   return (
-    <div class="stats">
+    <div class={`stats ${prefs.paused ? 'stats--paused' : ''}`}>
       <header class="stats__header">
-        <span class="stats__label">🟢 Live · {device.label}</span>
+        <span class="stats__label">
+          <span class={`stats__pip ${prefs.paused ? 'stats__pip--paused' : 'stats__pip--live'}`} />
+          {prefs.paused ? 'Paused' : 'Live'} · {device.label}
+        </span>
+        <HealthPill status={health} />
       </header>
 
       {snapshot === null ? (
@@ -92,12 +175,55 @@ export function StatsView({ device }: StatsViewProps): JSX.Element {
       )}
 
       <footer class="stats__footer">
-        <button class="stats__btn" onClick={openDashboard}>
+        <button class="stats__btn" onClick={togglePaused} type="button">
+          {prefs.paused ? 'Resume' : 'Pause'}
+        </button>
+        <button class="stats__btn" onClick={openDashboard} type="button">
           Open dashboard
         </button>
       </footer>
     </div>
   );
+}
+
+function HealthPill({
+  status,
+}: {
+  status: HealthStatus | 'checking' | null;
+}): JSX.Element | null {
+  if (status === null) return null;
+  if (status === 'checking') {
+    return <span class="stats__health stats__health--checking">checking API…</span>;
+  }
+  if (status.reachable) return null; // no news is good news; keep the header uncluttered
+  return (
+    <span class="stats__health stats__health--down" title={status.message ?? ''}>
+      API unreachable
+    </span>
+  );
+}
+
+/**
+ * Adds the currently-in-flight focus's live duration to today's rollup.
+ * Returns a fresh array so the sort stays stable across renders. If the
+ * current domain is already in the totals, its entry is bumped; otherwise
+ * a new entry is added. When the extension is paused, `nowMs === 0` and
+ * the addition is a no-op — the display freezes on the last close-out.
+ */
+function interpolateCurrentFocus(
+  totals: DomainTotal[],
+  live: LiveFocus | null,
+  nowMs: number,
+): DomainTotal[] {
+  if (live === null || nowMs === 0) return totals;
+  const extra = Math.max(0, nowMs - live.startedAt.getTime());
+  if (extra === 0) return totals;
+  const idx = totals.findIndex((t) => t.domain === live.domain);
+  const bumped =
+    idx === -1
+      ? [...totals, { domain: live.domain, durationMs: extra }]
+      : totals.map((t, i) => (i === idx ? { ...t, durationMs: t.durationMs + extra } : t));
+  return bumped.sort((a, b) => b.durationMs - a.durationMs);
 }
 
 async function openDashboard(): Promise<void> {

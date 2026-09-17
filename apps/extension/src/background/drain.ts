@@ -53,7 +53,13 @@ export interface FlushSummary {
   chunksSent: number;
   eventsAcked: number;
   eventsDropped: number;
-  exitReason: 'empty' | 'not_paired' | 'transient' | 'auth_rejected' | 'max_chunks';
+  exitReason:
+    | 'empty'
+    | 'not_paired'
+    | 'transient'
+    | 'auth_rejected'
+    | 'max_chunks'
+    | 'paused';
 }
 
 /**

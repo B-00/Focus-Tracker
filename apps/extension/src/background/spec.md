@@ -80,11 +80,26 @@ Design notes:
 - **Idempotency** is free: outbox key = event ULID = API dedup key. A retry after a crash-between-upload-and-delete just returns `duplicateCount = N` on the next attempt.
 - **Testability** is why the pure logic lives in `drain.ts` behind a `FlushDeps` interface. `flusher.check.ts` exercises all five branches (multi-chunk drain, transient, auth-rejected, permanent, unpaired) in plain Node with in-memory fakes — no IndexedDB, no fetch, no `browser.*`.
 
+## Pause
+
+Extension.md §10 pause toggle. Persisted in `browser.storage.local` as `preferences.paused` (see `../storage/preferences.ts`). Two consumers:
+
+- `capture.ts` keeps an in-memory `paused` mirror kept fresh via `subscribePreferences`. `transitionTo` refuses to open a NEW focus while paused, but still allows the transition-to-null path so idle handling and the pause-boundary close-out both work. On the pause boundary itself the capture module fires `transitionTo(null)` to close the in-flight focus; on unpause it re-primes.
+- `flusher.ts` calls `isPaused()` at the top of `flushAll()` and returns a `paused` summary without touching the API. The 60s alarm still ticks — cheaper than tearing it down and re-registering — but each tick is a no-op.
+
+Combined effect: while paused nothing enters the outbox, nothing leaves it, the rollup doesn't advance, and the popup grays out with a `Resume` button.
+
+## Reachability
+
+Extension.md §17. `flusher.ts` writes `apiHealth` to `browser.storage.local` after every real batch upload — the outcome maps to `reachable: false` for `transient` (5xx/network/timeout) and `reachable: true` for anything the API actually answered (2xx/4xx/401). The popup reads it, and if the stored status is missing or > 5 minutes old, fires a cheap `HEAD /v1/health` probe on open so the reachability pill is never blank.
+
+We deliberately do NOT run a HEAD probe on every event-page wake even though the spec suggests it — the event page wakes on every tab event, and piggybacking on the 60s flush gives a strictly stronger signal (full round-trip with auth) with no extra HTTP traffic.
+
 ## What's NOT here (yet)
 
-- No options page (Slice 5). The popup (`../popup/`) exists as of Slice 3 for pairing + local stats view.
-- No error surface — flush failures currently only `console.{info,warn,error}` in the background page devtools. Permanent-reject events are dropped rather than moved to a dead-letter store (v1 behaviour).
+- No error log surface in the UI. Flush failures currently only `console.{info,warn,error}` in the background page devtools. Permanent-reject events are dropped rather than moved to a dead-letter store (v1 behaviour).
 - No queue-depth-triggered flush — see design notes above.
+- No standalone Options page. Pause lives in the popup; API base URL is still storage-only (edit via devtools).
 
 ## Testing notes
 
