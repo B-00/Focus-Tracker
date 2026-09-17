@@ -52,8 +52,10 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         // Manifest sits at the extension root, gets copied to dist/.
-        // Slice 5 will add an `icons/` target here for the AMO bundle.
         { src: 'manifest.json', dest: '.' },
+        // PNG icons — sources committed in icons/; regenerated from
+        // icons/icon.svg via `pnpm icons` when the design changes.
+        { src: 'icons/icon-*.png', dest: 'icons' },
       ],
     }),
   ],

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Rounded-square background in Focus Tracker's accent pink from the
+       shared palette (apps/web/src/routes/activity/palette.ts). -->
+  <rect width="128" height="128" rx="24" fill="#f75590"/>
+  <!-- "FT" wordmark centered. Big enough that it stays legible when the
+       browser scales down to 16px in the toolbar. -->
+  <text
+    x="64"
+    y="88"
+    text-anchor="middle"
+    font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"
+    font-size="72"
+    font-weight="700"
+    fill="#ffffff"
+    letter-spacing="-4"
+  >FT</text>
+</svg>

@@ -46,3 +46,7 @@ apps/desktop/src-tauri/target/
 
 # Vite cache
 .vite/
+
+# Extension packaging artifacts — the signed .xpi is not committed
+# (rebuild from source + AMO signing per apps/extension/README.md)
+apps/extension/web-ext-artifacts/
