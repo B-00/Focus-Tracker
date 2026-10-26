@@ -24,13 +24,23 @@ const STYLES: Record<
   mid: {
     glyph: '●',
     label: 'Mid',
-    chip: 'bg-neutral-500/20 text-neutral-300 border-neutral-500/40',
+    chip: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
   },
   low: {
     glyph: '▽',
     label: 'Low',
-    chip: 'bg-neutral-700/40 text-neutral-400 border-neutral-700',
+    chip: 'bg-purple-400/20 text-purple-300 border-purple-400/40',
   },
+};
+
+/// Per-priority row background tint. Lives here (next to STYLES) so the
+/// badge and the row glow stay color-synced if the palette ever shifts.
+/// Static class strings so Tailwind's JIT compiler can see them.
+export const PRIORITY_ROW_BG: Record<TaskPriority, string> = {
+  extreme: 'bg-red-500/10 hover:bg-red-500/15',
+  high: 'bg-orange-500/10 hover:bg-orange-500/15',
+  mid: 'bg-emerald-500/10 hover:bg-emerald-500/15',
+  low: 'bg-purple-400/10 hover:bg-purple-400/15',
 };
 
 export const PRIORITY_SORT_INDEX: Record<TaskPriority, number> = {

@@ -45,9 +45,12 @@ export function InlineTaskComposer({
     mutationFn: (body: CreateTaskRequest) => createTask(body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: tasksQueryKeys.all });
-      // Keep the composer open so rapid add is painless, just reset the fields.
+      // Close + reset to clean defaults so the next "+ Add task" click
+      // opens a fresh form rather than one with stale state.
+      setOpen(false);
       setTitle('');
       setPriority('');
+      setStartDate(todayYmd());
       setEndDate('');
       setTransferIfMissed(false);
     },

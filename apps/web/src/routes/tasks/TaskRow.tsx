@@ -6,7 +6,7 @@ import {
   tasksQueryKeys,
   toggleTaskCompletion,
 } from '../../lib/tasks-api';
-import { PriorityBadge } from './PriorityBadge';
+import { PRIORITY_ROW_BG, PriorityBadge } from './PriorityBadge';
 
 // One row in a Dated / Ongoing panel. Checkbox → toggles completion with
 // optimistic UI. Trash icon → confirm-then-delete (hard, no trash).
@@ -43,9 +43,9 @@ export function TaskRow({ task, showDate = true }: TaskRowProps) {
 
   return (
     <li
-      className={`group flex items-center gap-3 rounded border border-transparent px-2 py-1.5 hover:border-neutral-800 hover:bg-neutral-900/40 ${
-        completed ? 'opacity-50' : ''
-      }`}
+      className={`group flex items-center gap-3 rounded border border-transparent px-2 py-1.5 transition-colors ${
+        PRIORITY_ROW_BG[task.priority]
+      } ${completed ? 'opacity-50' : ''}`}
     >
       <PriorityBadge priority={task.priority} variant="glyph" />
       <input
