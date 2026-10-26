@@ -8,6 +8,8 @@ import { AuthModule } from './auth/auth.module';
 import { DevicesModule } from './devices/devices.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
 import { ActivityModule } from './activity/activity.module';
+import { SectionsModule } from './sections/sections.module';
+import { TasksModule } from './tasks/tasks.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { ActivityModule } from './activity/activity.module';
     DevicesModule,
     TelemetryModule,
     ActivityModule,
+    SectionsModule,
+    TasksModule,
     HealthModule,
   ],
 })

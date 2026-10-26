@@ -76,6 +76,11 @@ function AppHeader({ email }: AppHeaderProps) {
         <nav className="flex items-center gap-1 text-sm" aria-label="Primary">
           <NavLink to="/" label="Dashboard" active={location === '/'} />
           <NavLink
+            to="/tasks"
+            label="Tasks"
+            active={location === '/tasks' || location.startsWith('/tasks')}
+          />
+          <NavLink
             to="/activity"
             label="Activity"
             active={location === '/activity' || location.startsWith('/activity')}
@@ -117,7 +122,7 @@ function AppHeader({ email }: AppHeaderProps) {
 }
 
 interface NavLinkProps {
-  to: '/' | '/activity' | '/settings';
+  to: '/' | '/tasks' | '/activity' | '/settings';
   label: string;
   active: boolean;
 }

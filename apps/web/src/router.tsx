@@ -12,6 +12,7 @@ import { LoginPage } from './routes/Login';
 import { DashboardPage } from './routes/Dashboard';
 import { SettingsPage } from './routes/Settings';
 import { ActivityPage } from './routes/Activity';
+import { TasksPage } from './routes/Tasks';
 
 // Code-based routing (no codegen). Tree:
 //
@@ -89,9 +90,20 @@ const activityRoute = createRoute({
   component: ActivityPage,
 });
 
+const tasksRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/tasks',
+  component: TasksPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedLayout.addChildren([dashboardRoute, activityRoute, settingsRoute]),
+  protectedLayout.addChildren([
+    dashboardRoute,
+    tasksRoute,
+    activityRoute,
+    settingsRoute,
+  ]),
 ]);
 
 export const router = createRouter({

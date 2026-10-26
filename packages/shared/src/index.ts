@@ -127,6 +127,32 @@ export type {
 } from './me.js';
 
 // ---------------------------------------------------------------------------
+//  Tasks + Sections (Tasks.md)
+// ---------------------------------------------------------------------------
+export {
+  sectionResponseSchema,
+  createSectionRequestSchema,
+  updateSectionRequestSchema,
+  SECTION_DELETE_MODES,
+  taskResponseSchema,
+  createTaskRequestSchema,
+  updateTaskRequestSchema,
+  listTasksQuerySchema,
+  TASK_ERROR_CODES,
+} from './tasks.js';
+export type {
+  SectionResponse,
+  CreateSectionRequest,
+  UpdateSectionRequest,
+  SectionDeleteMode,
+  TaskResponse,
+  CreateTaskRequest,
+  UpdateTaskRequest,
+  ListTasksQuery,
+  TaskErrorCode,
+} from './tasks.js';
+
+// ---------------------------------------------------------------------------
 //  Pairing + Devices (Auth.md §5)
 // ---------------------------------------------------------------------------
 export {
