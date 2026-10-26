@@ -6,7 +6,8 @@ import {
   tasksQueryKeys,
   toggleTaskCompletion,
 } from '../../lib/tasks-api';
-import { PRIORITY_ROW_BG, PriorityBadge } from './PriorityBadge';
+import { PriorityBadge } from './PriorityBadge';
+import { usePriorityColors, withAlpha } from './priority-colors';
 
 // One row in a Dated / Ongoing panel. Checkbox → toggles completion with
 // optimistic UI. Trash icon → confirm-then-delete (hard, no trash).
@@ -23,6 +24,7 @@ interface TaskRowProps {
 
 export function TaskRow({ task, showDate = true }: TaskRowProps) {
   const qc = useQueryClient();
+  const colors = usePriorityColors();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const toggleMutation = useMutation({
@@ -43,9 +45,10 @@ export function TaskRow({ task, showDate = true }: TaskRowProps) {
 
   return (
     <li
-      className={`group flex items-center gap-3 rounded border border-transparent px-2 py-1.5 transition-colors ${
-        PRIORITY_ROW_BG[task.priority]
-      } ${completed ? 'opacity-50' : ''}`}
+      className={`group flex items-center gap-3 rounded border border-transparent px-2 py-1.5 transition-colors hover:border-neutral-800 ${
+        completed ? 'opacity-50' : ''
+      }`}
+      style={{ backgroundColor: withAlpha(colors[task.priority], 0.1) }}
     >
       <PriorityBadge priority={task.priority} variant="glyph" />
       <input

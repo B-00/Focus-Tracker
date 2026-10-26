@@ -13,6 +13,7 @@ import {
   tasksQueryKeys,
 } from '../lib/tasks-api';
 import { PRIORITY_SORT_INDEX } from './tasks/PriorityBadge';
+import { PriorityColorPicker } from './tasks/PriorityColorPicker';
 import { SectionBlock } from './tasks/SectionBlock';
 
 // /tasks — Slice 1 view. Two kind panels (Dated + Ongoing), each
@@ -75,6 +76,7 @@ export function TasksPage() {
             tasks={ongoingQuery.data ?? []}
             sections={sectionsQuery.data ?? []}
           />
+          <PriorityColorPicker />
         </div>
       )}
     </main>
