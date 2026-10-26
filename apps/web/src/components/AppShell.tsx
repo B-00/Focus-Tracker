@@ -1,61 +1,50 @@
 import { useState, type ReactNode } from 'react';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useTimezoneAutoDetect } from '../hooks/useTimezoneAutoDetect';
-import { logout as apiLogout, logoutAll as apiLogoutAll } from '../lib/auth-api';
+import { logout as apiLogout } from '../lib/auth-api';
 import { tokenStorage } from '../lib/token-storage';
 import { useAuthStore } from '../stores/auth-store';
 
 // The authenticated app shell. Wraps every protected route so users always
 // have:
-//   - A consistent nav (Dashboard / Settings) on every screen.
-//   - The sign-out control + "Sign out everywhere" toggle in one canonical
-//     place — Settings.md §4.1 makes Profile the home for logout, but the
-//     shell still surfaces it so people don't have to dig into Settings
-//     just to sign out. (Both points end up calling the same code path.)
+//   - A consistent nav (Dashboard / Tasks / Activity / Settings).
+//   - A single "Sign out" control that logs out of THIS browser only.
+//     The nuclear "Log out of all" variant lives in Settings → Profile
+//     (Settings.md §4.1) — the day-to-day sign-out doesn't need to carry
+//     the extra toggle.
 //   - A future home for the cross-route sticky session bar
 //     (FocusSession.md §8.3 — not implemented yet, placeholder noted in
 //     the JSX comment).
 
 export function AppShell(): ReactNode {
-  const user = useAuthStore((s) => s.user);
   // Silent backfill of the user's IANA timezone from the browser on every
   // authenticated session. See Settings.md §4.1.1 and useTimezoneAutoDetect
   // for the policy (no-op once `timezoneOverridden = true`).
   useTimezoneAutoDetect();
   return (
     <div className="min-h-screen text-neutral-100">
-      <AppHeader email={user?.email ?? null} />
+      <AppHeader />
       {/* TODO(FocusSession §8.3): cross-route sticky session bar mounts here */}
       <Outlet />
     </div>
   );
 }
 
-interface AppHeaderProps {
-  email: string | null;
-}
-
-function AppHeader({ email }: AppHeaderProps) {
+function AppHeader() {
   const navigate = useNavigate();
   const resetSession = useAuthStore((s) => s.resetSession);
   const location = useRouterState({ select: (s) => s.location.pathname });
 
-  const [signOutScope, setSignOutScope] = useState<'this' | 'all'>('this');
   const [signingOut, setSigningOut] = useState(false);
 
   async function handleSignOut(): Promise<void> {
     setSigningOut(true);
     try {
-      if (signOutScope === 'all') {
-        await apiLogoutAll();
-      } else {
-        const refresh = tokenStorage.getRefreshToken();
-        if (refresh) await apiLogout(refresh);
-      }
+      const refresh = tokenStorage.getRefreshToken();
+      if (refresh) await apiLogout(refresh);
     } catch {
       // Best-effort — wipe locally even if the server call failed so the
-      // user isn't trapped in a half-authed state. (Same posture as the
-      // original Dashboard sign-out path.)
+      // user isn't trapped in a half-authed state.
     } finally {
       resetSession();
       setSigningOut(false);
@@ -93,20 +82,6 @@ function AppHeader({ email }: AppHeaderProps) {
         </nav>
 
         <div className="ml-auto flex items-center gap-3">
-          {email && (
-            <span className="hidden truncate text-xs text-neutral-400 sm:inline">
-              {email}
-            </span>
-          )}
-          <label className="hidden items-center gap-1.5 text-[0.7rem] text-neutral-400 sm:flex">
-            <input
-              type="checkbox"
-              className="h-3 w-3 rounded border-neutral-600 bg-neutral-900"
-              checked={signOutScope === 'all'}
-              onChange={(e) => setSignOutScope(e.target.checked ? 'all' : 'this')}
-            />
-            Everywhere
-          </label>
           <button
             type="button"
             onClick={() => void handleSignOut()}
