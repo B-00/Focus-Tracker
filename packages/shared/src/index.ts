@@ -138,6 +138,8 @@ export {
   createTaskRequestSchema,
   updateTaskRequestSchema,
   listTasksQuerySchema,
+  taskInstanceResponseSchema,
+  updateInstanceRequestSchema,
   TASK_ERROR_CODES,
 } from './tasks.js';
 export type {
@@ -149,6 +151,8 @@ export type {
   CreateTaskRequest,
   UpdateTaskRequest,
   ListTasksQuery,
+  TaskInstanceResponse,
+  UpdateInstanceRequest,
   TaskErrorCode,
 } from './tasks.js';
 

@@ -1,14 +1,17 @@
 import { Module } from '@nestjs/common';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
+import { InstancesController } from './instances.controller';
+import { InstancesService } from './instances.service';
 
-/// Owns `/v1/tasks/*`. See `Tasks.md`.
+/// Owns `/v1/tasks/*` and `/v1/instances/*`. See `Tasks.md`.
 ///
-/// Slice 1: dated + ongoing kinds, full CRUD. Routines (Slice 2) and
-/// transfer/backlog (Slice 3) extend this same module.
+/// Both controllers live in one module because they operate on the
+/// same aggregate (Task + its TaskInstances) and nightly maintenance
+/// (Slice 3+) will coordinate them.
 @Module({
-  controllers: [TasksController],
-  providers: [TasksService],
-  exports: [TasksService],
+  controllers: [TasksController, InstancesController],
+  providers: [TasksService, InstancesService],
+  exports: [TasksService, InstancesService],
 })
 export class TasksModule {}

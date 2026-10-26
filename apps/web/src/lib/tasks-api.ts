@@ -13,6 +13,7 @@ import type {
   CreateTaskRequest,
   SectionDeleteMode,
   SectionResponse,
+  TaskInstanceResponse,
   TaskResponse,
   UpdateSectionRequest,
   UpdateTaskRequest,
@@ -32,6 +33,11 @@ export const tasksQueryKeys = {
 export const sectionsQueryKeys = {
   all: ['sections'] as const,
   list: () => [...sectionsQueryKeys.all, 'list'] as const,
+};
+
+export const instancesQueryKeys = {
+  all: ['instances'] as const,
+  today: () => [...instancesQueryKeys.all, 'today'] as const,
 };
 
 export interface TaskListFilters {
@@ -123,6 +129,39 @@ export function toggleTaskCompletion(
   nextCompleted: boolean,
 ): Promise<TaskResponse> {
   return updateTask(id, {
+    completedAt: nextCompleted ? new Date().toISOString() : null,
+  });
+}
+
+// ---------------------------------------------------------------------------
+//  Task instances (routines)
+// ---------------------------------------------------------------------------
+
+/// Fetches (and server-side lazily materialises) today's routine
+/// instances for the authenticated user. Returns one row per routine
+/// that's scheduled for today and within its active window.
+export async function listTodayInstances(): Promise<TaskInstanceResponse[]> {
+  const res = await api.get<TaskInstanceResponse[]>('/v1/instances/today');
+  return res.data;
+}
+
+export async function updateInstance(
+  id: string,
+  body: { completedAt: string | null },
+): Promise<TaskInstanceResponse> {
+  const res = await api.patch<TaskInstanceResponse>(
+    `/v1/instances/${encodeURIComponent(id)}`,
+    body,
+  );
+  return res.data;
+}
+
+/// Mirror of toggleTaskCompletion for a routine instance.
+export function toggleInstanceCompletion(
+  id: string,
+  nextCompleted: boolean,
+): Promise<TaskInstanceResponse> {
+  return updateInstance(id, {
     completedAt: nextCompleted ? new Date().toISOString() : null,
   });
 }

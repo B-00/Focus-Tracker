@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-  NotImplementedException,
 } from '@nestjs/common';
 import type { Task as PrismaTask, Prisma } from '@prisma/client';
 import type {
@@ -13,10 +12,10 @@ import type {
 } from '@focus-tracker/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
-/// Tasks CRUD. Slice-1 scope: `kind = 'dated' | 'ongoing'` fully
-/// supported; `kind = 'routine'` rejected with 501 at create time
-/// (surface stays stable so clients don't need a schema version bump
-/// when Slice 2 lands).
+/// Tasks CRUD. Supports all three kinds (dated / ongoing / routine).
+/// Routine completion lives on `TaskInstance` (see InstancesService),
+/// not on the Task row itself — the service enforces that by refusing
+/// to write `completedAt` on routines here.
 ///
 /// Validation layering:
 ///  * Shape validation (strings, enums, discriminated union) lives in
@@ -83,16 +82,6 @@ export class TasksService {
   // -------------------------------------------------------------------------
 
   async create(userId: string, body: CreateTaskRequest): Promise<TaskResponse> {
-    if (body.kind === 'routine') {
-      // Zod accepted the shape but routines need Slice 2's TaskInstance
-      // materialisation + nightly job. Fail loud with a specific code
-      // so the client can show a sensible message rather than a 500.
-      throw new NotImplementedException({
-        error: 'kind_not_implemented',
-        message: 'Routine tasks ship in Slice 2',
-      });
-    }
-
     if (body.sectionId !== undefined && body.sectionId !== null) {
       await this.assertSectionBelongsToUser(userId, body.sectionId);
     }
@@ -124,6 +113,21 @@ export class TasksService {
       data.startDate = startDate;
       data.endDate = endDate;
       data.transferIfMissed = body.transferIfMissed ?? false;
+    } else if (body.kind === 'routine') {
+      // Dedupe the picker — [1,1,3] from a wonky client → [1,3].
+      // Also sort so storage order matches wire order; cheap and
+      // keeps "did you edit the cadence" comparisons trivial.
+      data.routineDaysOfWeek = Array.from(new Set(body.routineDaysOfWeek)).sort(
+        (a, b) => a - b,
+      );
+      data.routineStartDate =
+        body.routineStartDate !== undefined ? toDbDate(body.routineStartDate) : null;
+      data.routineEndDate =
+        body.routineEndDate !== undefined && body.routineEndDate !== null
+          ? toDbDate(body.routineEndDate)
+          : null;
+      // Routines complete per-instance; the Task row's `completedAt`
+      // stays null forever. Enforced by the update() handler.
     }
     // 'ongoing' leaves all date / routine fields at their schema defaults.
 
@@ -153,29 +157,40 @@ export class TasksService {
       throw new NotFoundException({ error: 'task_not_found' });
     }
 
-    // Routines can't accept most of these fields; punt until Slice 2.
-    if (existing.kind === 'routine') {
-      throw new NotImplementedException({
-        error: 'kind_not_implemented',
-        message: 'Editing routine tasks ships in Slice 2',
+    const isRoutine = existing.kind === 'routine';
+    const touchesRoutineFields =
+      body.routineDaysOfWeek !== undefined ||
+      body.routineStartDate !== undefined ||
+      body.routineEndDate !== undefined;
+
+    // Routine fields only valid on routine tasks.
+    if (!isRoutine && touchesRoutineFields) {
+      throw new BadRequestException({
+        error: 'kind_immutable',
+        message: 'Routine fields are only editable on routine tasks',
+      });
+    }
+
+    // Date / completion / transfer are not valid on routines — those
+    // live on TaskInstance (completion) or aren't applicable (dates,
+    // transfer-if-missed). Keeps the Task row consistent with §3.2.
+    if (
+      isRoutine &&
+      (body.startDate !== undefined ||
+        body.endDate !== undefined ||
+        body.completedAt !== undefined ||
+        body.transferIfMissed !== undefined)
+    ) {
+      throw new BadRequestException({
+        error: 'kind_immutable',
+        message:
+          'Dated / completion / transfer fields are not valid on routine tasks',
       });
     }
 
     // Validate section FK if the caller is moving sections.
     if (body.sectionId !== undefined && body.sectionId !== null) {
       await this.assertSectionBelongsToUser(userId, body.sectionId);
-    }
-
-    // Reject slice-2-only fields explicitly rather than silently.
-    if (
-      body.routineDaysOfWeek !== undefined ||
-      body.routineStartDate !== undefined ||
-      body.routineEndDate !== undefined
-    ) {
-      throw new BadRequestException({
-        error: 'kind_immutable',
-        message: 'Routine fields are only editable on routine tasks (Slice 2)',
-      });
     }
 
     // transferIfMissed single-day guard, same rule as create.
@@ -222,6 +237,25 @@ export class TasksService {
         : {}),
       ...(body.transferIfMissed !== undefined
         ? { transferIfMissed: body.transferIfMissed }
+        : {}),
+      // Routine-only fields. Editing cadence takes effect for *future*
+      // instances only — existing TaskInstance rows are preserved so
+      // the consistency chart's history stays honest (Tasks.md §5.1).
+      ...(body.routineDaysOfWeek !== undefined
+        ? {
+            routineDaysOfWeek: Array.from(new Set(body.routineDaysOfWeek)).sort(
+              (a, b) => a - b,
+            ),
+          }
+        : {}),
+      ...(body.routineStartDate !== undefined
+        ? { routineStartDate: toDbDate(body.routineStartDate) }
+        : {}),
+      ...(body.routineEndDate !== undefined
+        ? {
+            routineEndDate:
+              body.routineEndDate === null ? null : toDbDate(body.routineEndDate),
+          }
         : {}),
       ...(body.archivedAt !== undefined
         ? { archivedAt: body.archivedAt === null ? null : new Date(body.archivedAt) }

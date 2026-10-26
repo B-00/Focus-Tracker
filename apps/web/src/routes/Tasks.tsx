@@ -2,18 +2,22 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   SectionResponse,
+  TaskInstanceResponse,
   TaskKind,
   TaskResponse,
 } from '@focus-tracker/shared';
 import {
   createSection,
+  instancesQueryKeys,
   listSections,
   listTasks,
+  listTodayInstances,
   sectionsQueryKeys,
   tasksQueryKeys,
 } from '../lib/tasks-api';
 import { PRIORITY_SORT_INDEX } from './tasks/PriorityBadge';
 import { PriorityColorPicker } from './tasks/PriorityColorPicker';
+import { RoutineRow } from './tasks/RoutineRow';
 import { SectionBlock } from './tasks/SectionBlock';
 
 // /tasks — Slice 1 view. Two kind panels (Dated + Ongoing), each
@@ -37,11 +41,30 @@ export function TasksPage() {
     queryKey: tasksQueryKeys.list({ kind: 'ongoing' }),
     queryFn: () => listTasks({ kind: 'ongoing' }),
   });
+  const routineQuery = useQuery({
+    queryKey: tasksQueryKeys.list({ kind: 'routine' }),
+    queryFn: () => listTasks({ kind: 'routine' }),
+  });
+  // The /today endpoint lazy-materialises today's instances server-side,
+  // so firing it alongside the routine list means by the time rows paint
+  // their checkboxes are already bound to a real instance id.
+  const todayInstancesQuery = useQuery({
+    queryKey: instancesQueryKeys.today(),
+    queryFn: listTodayInstances,
+  });
 
   const isLoading =
-    sectionsQuery.isLoading || datedQuery.isLoading || ongoingQuery.isLoading;
+    sectionsQuery.isLoading ||
+    datedQuery.isLoading ||
+    ongoingQuery.isLoading ||
+    routineQuery.isLoading ||
+    todayInstancesQuery.isLoading;
   const isError =
-    sectionsQuery.isError || datedQuery.isError || ongoingQuery.isError;
+    sectionsQuery.isError ||
+    datedQuery.isError ||
+    ongoingQuery.isError ||
+    routineQuery.isError ||
+    todayInstancesQuery.isError;
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-6">
@@ -64,6 +87,13 @@ export function TasksPage() {
 
       {!isLoading && !isError && (
         <div className="flex flex-col gap-8">
+          <KindPanel
+            title="Routine"
+            kind="routine"
+            tasks={routineQuery.data ?? []}
+            sections={sectionsQuery.data ?? []}
+            todayInstances={todayInstancesQuery.data ?? []}
+          />
           <KindPanel
             title="Dated"
             kind="dated"
@@ -88,9 +118,18 @@ interface KindPanelProps {
   kind: TaskKind;
   tasks: TaskResponse[];
   sections: SectionResponse[];
+  /// Routine panel only — today's TaskInstance rows, joined client-side
+  /// so each RoutineRow can bind its checkbox to the correct instance id.
+  todayInstances?: TaskInstanceResponse[];
 }
 
-function KindPanel({ title, kind, tasks, sections }: KindPanelProps) {
+function KindPanel({
+  title,
+  kind,
+  tasks,
+  sections,
+  todayInstances,
+}: KindPanelProps) {
   // Group tasks by section id (null = Inbox) and sort each group by
   // priority DESC, then by createdAt ASC — matches the server default
   // but we re-sort client-side so late mutations (optimistic completion)
@@ -117,6 +156,24 @@ function KindPanel({ title, kind, tasks, sections }: KindPanelProps) {
     return map;
   }, [tasks]);
 
+  // Routine-only: build a taskId → today's instance lookup. Memo keyed
+  // on identity because the array ref changes on every refetch.
+  const instancesByTaskId = useMemo(() => {
+    const map = new Map<string, TaskInstanceResponse>();
+    for (const i of todayInstances ?? []) map.set(i.taskId, i);
+    return map;
+  }, [todayInstances]);
+
+  const renderRow =
+    kind === 'routine'
+      ? (task: TaskResponse) => (
+          <RoutineRow
+            task={task}
+            todayInstance={instancesByTaskId.get(task.id) ?? null}
+          />
+        )
+      : undefined;
+
   return (
     <section>
       <header className="mb-3 flex items-baseline gap-2 border-b border-neutral-800 pb-1">
@@ -134,6 +191,7 @@ function KindPanel({ title, kind, tasks, sections }: KindPanelProps) {
           section={s}
           tasks={byGroup.get(s.id) ?? []}
           kindForComposer={kind}
+          renderRow={renderRow}
         />
       ))}
       {/* Inbox pseudo-section — always render so the composer is available
@@ -142,6 +200,7 @@ function KindPanel({ title, kind, tasks, sections }: KindPanelProps) {
         section={null}
         tasks={byGroup.get(null) ?? []}
         kindForComposer={kind}
+        renderRow={renderRow}
       />
     </section>
   );

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -28,6 +29,18 @@ interface InlineTaskComposerProps {
   defaultKind?: TaskKind;
 }
 
+// ISO weekday labels. 1 = Mon ... 7 = Sun — matches Prisma's `Int[]`
+// storage format for `routineDaysOfWeek`.
+const WEEKDAY_LABELS: { iso: number; short: string }[] = [
+  { iso: 1, short: 'M' },
+  { iso: 2, short: 'T' },
+  { iso: 3, short: 'W' },
+  { iso: 4, short: 'T' },
+  { iso: 5, short: 'F' },
+  { iso: 6, short: 'S' },
+  { iso: 7, short: 'S' },
+];
+
 export function InlineTaskComposer({
   sectionId,
   defaultKind = 'dated',
@@ -40,6 +53,7 @@ export function InlineTaskComposer({
   const [startDate, setStartDate] = useState(() => todayYmd());
   const [endDate, setEndDate] = useState('');
   const [transferIfMissed, setTransferIfMissed] = useState(false);
+  const [routineDays, setRoutineDays] = useState<number[]>([1, 2, 3, 4, 5]); // Weekdays default
 
   const createMutation = useMutation({
     mutationFn: (body: CreateTaskRequest) => createTask(body),
@@ -53,11 +67,21 @@ export function InlineTaskComposer({
       setStartDate(todayYmd());
       setEndDate('');
       setTransferIfMissed(false);
+      setRoutineDays([1, 2, 3, 4, 5]);
     },
   });
 
+  function toggleRoutineDay(iso: number) {
+    setRoutineDays((prev) =>
+      prev.includes(iso)
+        ? prev.filter((d) => d !== iso)
+        : [...prev, iso].sort((a, b) => a - b),
+    );
+  }
+
   function submit(): void {
-    if (!title.trim() || priority === '' || kind === 'routine') return;
+    if (!title.trim() || priority === '') return;
+    if (kind === 'routine' && routineDays.length === 0) return;
     const base = {
       priority: priority as TaskPriority,
       title: title.trim(),
@@ -72,13 +96,21 @@ export function InlineTaskComposer({
           transferIfMissed && (endDate === '' || endDate === startDate),
         ...base,
       });
+    } else if (kind === 'routine') {
+      createMutation.mutate({
+        kind: 'routine',
+        routineDaysOfWeek: routineDays,
+        ...base,
+      });
     } else {
       createMutation.mutate({ kind: 'ongoing', ...base });
     }
   }
 
   const canSubmit =
-    title.trim().length > 0 && priority !== '' && kind !== 'routine';
+    title.trim().length > 0 &&
+    priority !== '' &&
+    (kind !== 'routine' || routineDays.length > 0);
   const isSingleDay = kind === 'dated' && (endDate === '' || endDate === startDate);
 
   if (!open) {
@@ -110,7 +142,7 @@ export function InlineTaskComposer({
         >
           <option value="dated">Dated</option>
           <option value="ongoing">Ongoing</option>
-          <option value="routine">Routine (Slice 2)</option>
+          <option value="routine">Routine</option>
         </select>
         <input
           autoFocus
@@ -159,9 +191,52 @@ export function InlineTaskComposer({
       )}
 
       {kind === 'routine' && (
-        <p className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[0.7rem] text-amber-300">
-          Routine tasks ship in Slice 2. Pick Dated or Ongoing for now.
-        </p>
+        <div className="flex flex-col gap-1.5 text-xs text-neutral-400">
+          <div className="flex items-center gap-2">
+            <span className="w-14 shrink-0 text-[0.65rem] uppercase tracking-wide">
+              Days
+            </span>
+            <div className="flex gap-1">
+              {WEEKDAY_LABELS.map((d) => {
+                const on = routineDays.includes(d.iso);
+                return (
+                  <button
+                    type="button"
+                    key={d.iso}
+                    onClick={() => toggleRoutineDay(d.iso)}
+                    aria-pressed={on}
+                    className={`h-6 w-6 rounded border text-[0.7rem] font-medium transition-colors ${
+                      on
+                        ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200'
+                        : 'border-neutral-700 bg-neutral-900 text-neutral-500 hover:text-neutral-300'
+                    }`}
+                  >
+                    {d.short}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-14 shrink-0" />
+            <div className="flex gap-1 text-[0.65rem]">
+              <PresetButton onClick={() => setRoutineDays([1, 2, 3, 4, 5, 6, 7])}>
+                Daily
+              </PresetButton>
+              <PresetButton onClick={() => setRoutineDays([1, 2, 3, 4, 5])}>
+                Weekdays
+              </PresetButton>
+              <PresetButton onClick={() => setRoutineDays([6, 7])}>
+                Weekends
+              </PresetButton>
+            </div>
+          </div>
+          {routineDays.length === 0 && (
+            <p className="text-[0.65rem] text-amber-300">
+              Pick at least one day.
+            </p>
+          )}
+        </div>
       )}
 
       <div className="flex items-center gap-2">
@@ -221,4 +296,22 @@ function todayYmd(): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function PresetButton({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+    >
+      {children}
+    </button>
+  );
 }

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { SectionResponse, TaskKind, TaskResponse } from '@focus-tracker/shared';
 import {
@@ -25,6 +26,11 @@ interface SectionBlockProps {
   /// Hide the composer entirely (e.g. for Backlog which uses a
   /// different add flow). Default: visible.
   hideComposer?: boolean;
+  /// Custom row renderer. Default renders a `TaskRow`. Routines
+  /// override this to render `RoutineRow` (which needs today's
+  /// instance joined in — a dependency SectionBlock doesn't know
+  /// about by design).
+  renderRow?: (task: TaskResponse) => ReactNode;
 }
 
 export function SectionBlock({
@@ -32,6 +38,7 @@ export function SectionBlock({
   tasks,
   kindForComposer,
   hideComposer = false,
+  renderRow,
 }: SectionBlockProps) {
   const qc = useQueryClient();
   const [renameOpen, setRenameOpen] = useState(false);
@@ -158,9 +165,13 @@ export function SectionBlock({
       {/* Rows */}
       {tasks.length > 0 ? (
         <ul className="flex flex-col">
-          {tasks.map((t) => (
-            <TaskRow key={t.id} task={t} />
-          ))}
+          {tasks.map((t) =>
+            renderRow ? (
+              <Fragment key={t.id}>{renderRow(t)}</Fragment>
+            ) : (
+              <TaskRow key={t.id} task={t} />
+            ),
+          )}
         </ul>
       ) : (
         <p className="px-3 py-1 text-[0.7rem] italic text-neutral-600">

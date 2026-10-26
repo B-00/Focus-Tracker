@@ -121,9 +121,8 @@ const ongoingCreateSchema = z.object({
   sectionId: z.string().nullable().optional(),
 });
 
-/// Routine creation is accepted at the Zod layer so the surface is
-/// stable, but the service rejects it with 501 until Slice 2 lands
-/// (comment at the controller tells callers which slice).
+/// Routine creation. Days-of-week required and non-empty; the service
+/// snapshots the current priority onto every materialised TaskInstance.
 const routineCreateSchema = z.object({
   kind: z.literal('routine'),
   priority: z.enum(TASK_PRIORITIES),
@@ -170,8 +169,8 @@ export const updateTaskRequestSchema = z
     endDate: dateOnlySchema.nullable().optional(),
     completedAt: z.union([z.string().datetime(), z.null()]).optional(),
     transferIfMissed: z.boolean().optional(),
-    /// Routine subset — Slice 2 territory. Accepted at the schema layer
-    /// but the service refuses them until routines ship.
+    /// Routine subset — only accepted when the task's kind is 'routine';
+    /// the service rejects these fields on dated/ongoing tasks.
     routineDaysOfWeek: z.array(z.number().int().min(1).max(7)).min(1).optional(),
     routineStartDate: dateOnlySchema.optional(),
     routineEndDate: dateOnlySchema.nullable().optional(),
@@ -205,9 +204,38 @@ export const TASK_ERROR_CODES = [
   'validation_failed',
   'section_not_found',
   'task_not_found',
-  'kind_not_implemented', // routine create/update before Slice 2
+  'instance_not_found',
+  'kind_not_implemented',
   'kind_immutable',
   'transfer_requires_single_day',
   'section_delete_mode_required',
 ] as const;
 export type TaskErrorCode = (typeof TASK_ERROR_CODES)[number];
+
+// ---------------------------------------------------------------------------
+//  TaskInstance (Tasks.md §3.3)
+// ---------------------------------------------------------------------------
+
+/// One row per scheduled occurrence of a routine task. `priority` is a
+/// snapshot of the parent's priority at materialisation time — editing
+/// the parent later does not retroactively rewrite past instances.
+export const taskInstanceResponseSchema = z.object({
+  id: z.string().min(1),
+  taskId: z.string().min(1),
+  scheduledDate: dateOnlySchema,
+  priority: z.enum(TASK_PRIORITIES),
+  completedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type TaskInstanceResponse = z.infer<typeof taskInstanceResponseSchema>;
+
+/// PATCH /v1/instances/:id — Slice 2 only toggles completion. Future
+/// slices may add fields; keeping the body a single-key object keeps
+/// the common case trivial.
+export const updateInstanceRequestSchema = z
+  .object({
+    completedAt: z.union([z.string().datetime(), z.null()]),
+  })
+  .refine((o) => Object.keys(o).length > 0, { message: 'empty update' });
+export type UpdateInstanceRequest = z.infer<typeof updateInstanceRequestSchema>;
