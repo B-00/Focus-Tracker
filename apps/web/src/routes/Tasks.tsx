@@ -19,10 +19,12 @@ import {
   tasksQueryKeys,
 } from '../lib/tasks-api';
 import { BacklogRow } from './tasks/BacklogRow';
+import { ConsistencyChartBlock } from './charts/ConsistencyChartBlock';
 import { PRIORITY_SORT_INDEX } from './tasks/PriorityBadge';
 import { PriorityColorPicker } from './tasks/PriorityColorPicker';
 import { RoutineRow } from './tasks/RoutineRow';
 import { SectionBlock } from './tasks/SectionBlock';
+import { TopOfTasksCharts } from './tasks/charts/TopOfTasksCharts';
 
 // /tasks — Slice 1 view. Two kind panels (Dated + Ongoing), each
 // grouped by Section with Inbox last. Routine + Backlog panels will
@@ -83,7 +85,7 @@ export function TasksPage() {
         <div>
           <h1 className="text-2xl font-semibold text-neutral-100">Tasks</h1>
           <p className="text-sm text-neutral-500">
-            Dated + Ongoing. Routine panel and consistency charts land in later slices.
+            Routine, Dated, Ongoing &mdash; with consistency charts.
           </p>
         </div>
         <AddSectionButton />
@@ -98,6 +100,7 @@ export function TasksPage() {
 
       {!isLoading && !isError && (
         <div className="flex flex-col gap-8">
+          <TopOfTasksCharts />
           <KindPanel
             title="Routine"
             kind="routine"
@@ -200,13 +203,27 @@ function KindPanel({
       </header>
 
       {sections.map((s) => (
-        <SectionBlock
-          key={s.id}
-          section={s}
-          tasks={byGroup.get(s.id) ?? []}
-          kindForComposer={kind}
-          renderRow={renderRow}
-        />
+        <div key={s.id}>
+          {/* Per-Section Dated chart (TaskCharts.md §3.2). Routine and
+              Ongoing panels don't get per-Section charts — globals only. */}
+          {kind === 'dated' && (
+            <div className="mb-2 px-2">
+              <ConsistencyChartBlock
+                title={s.name}
+                scope={{ kind: 'dated-section', sectionId: s.id }}
+                lineColor={s.color}
+                height={160}
+                emptyLabel={`No dated-task history for ${s.name} yet.`}
+              />
+            </div>
+          )}
+          <SectionBlock
+            section={s}
+            tasks={byGroup.get(s.id) ?? []}
+            kindForComposer={kind}
+            renderRow={renderRow}
+          />
+        </div>
       ))}
       {/* Inbox pseudo-section — always render so the composer is available
           even on a fresh account with no custom sections yet. */}

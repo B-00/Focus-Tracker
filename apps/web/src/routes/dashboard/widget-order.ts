@@ -14,18 +14,23 @@ export const WIDGET_IDS = [
   'today_routines',
   'ongoing_tasks',
   'backlog',
+  'routine_chart',
+  'dated_chart',
   'today_activity',
 ] as const;
 export type WidgetId = (typeof WIDGET_IDS)[number];
 
 /// Default order matches the user's preferred "action-first" stack:
-/// today's actionable task lists at the top, trend / activity signal
-/// at the bottom. Overridable per-user via moveWidgetUp/Down.
+/// today's actionable task lists at the top, consistency trends in
+/// the middle, activity signal at the bottom. Overridable per-user
+/// via moveWidgetUp/Down.
 export const DEFAULT_ORDER: readonly WidgetId[] = [
   'today_tasks',
   'today_routines',
   'ongoing_tasks',
   'backlog',
+  'routine_chart',
+  'dated_chart',
   'today_activity',
 ];
 

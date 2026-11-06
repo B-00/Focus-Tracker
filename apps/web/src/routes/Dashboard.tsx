@@ -1,6 +1,8 @@
 import type { ComponentType } from 'react';
 import { BacklogIndicatorWidget } from './dashboard/BacklogIndicatorWidget';
+import { DatedChartWidget } from './dashboard/DatedChartWidget';
 import { OngoingTasksWidget } from './dashboard/OngoingTasksWidget';
+import { RoutineChartWidget } from './dashboard/RoutineChartWidget';
 import { TodayActivityWidget } from './dashboard/TodayActivityWidget';
 import { TodayRoutinesWidget } from './dashboard/TodayRoutinesWidget';
 import { TodayTasksWidget } from './dashboard/TodayTasksWidget';
@@ -27,6 +29,8 @@ const WIDGET_MAP: Record<WidgetId, ComponentType> = {
   today_routines: TodayRoutinesWidget,
   ongoing_tasks: OngoingTasksWidget,
   backlog: BacklogIndicatorWidget,
+  routine_chart: RoutineChartWidget,
+  dated_chart: DatedChartWidget,
   today_activity: TodayActivityWidget,
 };
 
@@ -71,6 +75,8 @@ function isDefaultOrder(order: readonly WidgetId[]): boolean {
     'today_routines',
     'ongoing_tasks',
     'backlog',
+    'routine_chart',
+    'dated_chart',
     'today_activity',
   ];
   if (order.length !== defaultIds.length) return false;
