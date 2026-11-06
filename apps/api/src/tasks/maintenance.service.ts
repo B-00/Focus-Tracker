@@ -23,13 +23,12 @@ import { wallClockInTz } from '../activity/tz.util';
 // preserved for every snapshot. Bounded to MAX_CATCHUP_DAYS to keep
 // a brand-new install (or a very long outage) from running wild.
 //
-// ponytail: Inbox tasks (sectionId == null) are EXCLUDED from Step 2 +
-// Step 4 snapshots because the two daily-score tables require a
-// non-null sectionId. The spec (TaskCharts.md §3.3) calls for inbox
-// to appear in global charts; upgrade path is to make sectionId
-// nullable on both score tables and treat null as "inbox" in the
-// global aggregation. Left out of v1 to avoid a schema migration
-// in the same slice that first uses these tables.
+// Inbox tasks (sectionId == null) ARE scored — the per-day group loops
+// use `sectionId ?? null` as the map key so a null-sectioned group gets
+// its own daily row. See `20261106_nullable_section_score_pk` for the
+// supporting schema change. The upsert is a manual find-then-update
+// because Prisma can't address the NULLS-NOT-DISTINCT raw-SQL unique
+// index via its typed `upsert.where` helper.
 
 interface StepReport {
   routineInstancesCreated: number;
@@ -258,6 +257,8 @@ export class MaintenanceService {
     // backlog, not archived. endDate IS NULL OR endDate = startDate
     // enforces "single day"; approximated here as endDate IS NULL +
     // in-memory filter for the rare endDate == startDate case.
+    // Inbox tasks (sectionId == null) are INCLUDED — they're grouped under
+    // the null key below and get their own daily row.
     const tasks = await this.prisma.task.findMany({
       where: {
         userId,
@@ -265,7 +266,6 @@ export class MaintenanceService {
         archivedAt: null,
         inBacklog: false,
         startDate: dayDbDate,
-        sectionId: { not: null }, // ponytail: skip inbox (see file header)
       },
       select: {
         id: true,
@@ -286,10 +286,10 @@ export class MaintenanceService {
     );
     if (singleDay.length === 0) return 0;
 
-    // Group by sectionId. sectionId is non-null here (filtered above).
-    const bySection = new Map<string, typeof singleDay>();
+    // Group by sectionId; null = Inbox pseudo-group.
+    const bySection = new Map<string | null, typeof singleDay>();
     for (const t of singleDay) {
-      const sid = t.sectionId!;
+      const sid = t.sectionId;
       const arr = bySection.get(sid) ?? [];
       arr.push(t);
       bySection.set(sid, arr);
@@ -322,40 +322,52 @@ export class MaintenanceService {
       const backlogPenalty = computeBacklogPenalty(backlogCount);
       const score = round3(baseScore + backlogPenalty);
       const runningTotal = round3(
-        (await this.previousDatedRunningTotal(sectionId, day)) + score,
+        (await this.previousDatedRunningTotal(userId, sectionId, day)) + score,
       );
 
-      await this.prisma.datedSectionDailyScore.upsert({
-        where: { sectionId_date: { sectionId, date: dayDbDate } },
-        create: {
-          sectionId,
-          userId,
-          date: dayDbDate,
-          scheduledCount,
-          completedCount,
-          scheduledWeight,
-          completedWeight,
-          backlogCount,
-          backlogTopPriority,
-          baseScore,
-          backlogPenalty,
-          score,
-          runningTotal,
-        },
-        update: {
-          scheduledCount,
-          completedCount,
-          scheduledWeight,
-          completedWeight,
-          backlogCount,
-          backlogTopPriority,
-          baseScore,
-          backlogPenalty,
-          score,
-          runningTotal,
-          computedAt: new Date(),
-        },
+      // Manual upsert: find by (userId, sectionId, date) then update or
+      // create. Can't use `prisma.upsert` because the NULLS-NOT-DISTINCT
+      // unique lives in raw SQL and isn't visible to the Prisma client.
+      const existing = await this.prisma.datedSectionDailyScore.findFirst({
+        where: { userId, sectionId, date: dayDbDate },
+        select: { id: true },
       });
+      if (existing) {
+        await this.prisma.datedSectionDailyScore.update({
+          where: { id: existing.id },
+          data: {
+            scheduledCount,
+            completedCount,
+            scheduledWeight,
+            completedWeight,
+            backlogCount,
+            backlogTopPriority,
+            baseScore,
+            backlogPenalty,
+            score,
+            runningTotal,
+            computedAt: new Date(),
+          },
+        });
+      } else {
+        await this.prisma.datedSectionDailyScore.create({
+          data: {
+            sectionId,
+            userId,
+            date: dayDbDate,
+            scheduledCount,
+            completedCount,
+            scheduledWeight,
+            completedWeight,
+            backlogCount,
+            backlogTopPriority,
+            baseScore,
+            backlogPenalty,
+            score,
+            runningTotal,
+          },
+        });
+      }
       rowsWritten += 1;
     }
     return rowsWritten;
@@ -446,11 +458,12 @@ export class MaintenanceService {
     const dayDbDate = toDbDate(day);
 
     // All of this user's routine instances scheduled on this day.
-    // Join to Task for sectionId; filter inbox out (see file header).
+    // Join to Task for sectionId; inbox (sectionId == null) IS included
+    // and grouped under the null key.
     const instances = await this.prisma.taskInstance.findMany({
       where: {
         scheduledDate: dayDbDate,
-        task: { userId, sectionId: { not: null } },
+        task: { userId },
       },
       select: {
         priority: true,
@@ -460,9 +473,9 @@ export class MaintenanceService {
     });
     if (instances.length === 0) return 0;
 
-    const bySection = new Map<string, typeof instances>();
+    const bySection = new Map<string | null, typeof instances>();
     for (const i of instances) {
-      const sid = i.task.sectionId!;
+      const sid = i.task.sectionId;
       const arr = bySection.get(sid) ?? [];
       arr.push(i);
       bySection.set(sid, arr);
@@ -478,32 +491,42 @@ export class MaintenanceService {
 
       const score = computeBaseScore(scheduledCount, completedWeight);
       const runningTotal = round3(
-        (await this.previousRoutineRunningTotal(sectionId, day)) + score,
+        (await this.previousRoutineRunningTotal(userId, sectionId, day)) + score,
       );
 
-      await this.prisma.routineSectionDailyScore.upsert({
-        where: { sectionId_date: { sectionId, date: dayDbDate } },
-        create: {
-          sectionId,
-          userId,
-          date: dayDbDate,
-          scheduledCount,
-          completedCount,
-          scheduledWeight,
-          completedWeight,
-          score,
-          runningTotal,
-        },
-        update: {
-          scheduledCount,
-          completedCount,
-          scheduledWeight,
-          completedWeight,
-          score,
-          runningTotal,
-          computedAt: new Date(),
-        },
+      // Manual upsert — see Step 2 for the rationale.
+      const existing = await this.prisma.routineSectionDailyScore.findFirst({
+        where: { userId, sectionId, date: dayDbDate },
+        select: { id: true },
       });
+      if (existing) {
+        await this.prisma.routineSectionDailyScore.update({
+          where: { id: existing.id },
+          data: {
+            scheduledCount,
+            completedCount,
+            scheduledWeight,
+            completedWeight,
+            score,
+            runningTotal,
+            computedAt: new Date(),
+          },
+        });
+      } else {
+        await this.prisma.routineSectionDailyScore.create({
+          data: {
+            sectionId,
+            userId,
+            date: dayDbDate,
+            scheduledCount,
+            completedCount,
+            scheduledWeight,
+            completedWeight,
+            score,
+            runningTotal,
+          },
+        });
+      }
       rowsWritten += 1;
     }
     return rowsWritten;
@@ -514,11 +537,12 @@ export class MaintenanceService {
   // -----------------------------------------------------------------
 
   private async previousDatedRunningTotal(
-    sectionId: string,
+    userId: string,
+    sectionId: string | null,
     day: string,
   ): Promise<number> {
     const row = await this.prisma.datedSectionDailyScore.findFirst({
-      where: { sectionId, date: { lt: toDbDate(day) } },
+      where: { userId, sectionId, date: { lt: toDbDate(day) } },
       orderBy: { date: 'desc' },
       select: { runningTotal: true },
     });
@@ -526,11 +550,12 @@ export class MaintenanceService {
   }
 
   private async previousRoutineRunningTotal(
-    sectionId: string,
+    userId: string,
+    sectionId: string | null,
     day: string,
   ): Promise<number> {
     const row = await this.prisma.routineSectionDailyScore.findFirst({
-      where: { sectionId, date: { lt: toDbDate(day) } },
+      where: { userId, sectionId, date: { lt: toDbDate(day) } },
       orderBy: { date: 'desc' },
       select: { runningTotal: true },
     });

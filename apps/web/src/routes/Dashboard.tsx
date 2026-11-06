@@ -8,6 +8,7 @@ import { TodayRoutinesWidget } from './dashboard/TodayRoutinesWidget';
 import { TodayTasksWidget } from './dashboard/TodayTasksWidget';
 import {
   resetWidgetOrder,
+  useHydrateDashboardPrefs,
   useWidgetOrder,
   type WidgetId,
 } from './dashboard/widget-order';
@@ -35,6 +36,10 @@ const WIDGET_MAP: Record<WidgetId, ComponentType> = {
 };
 
 export function DashboardPage() {
+  // Fire the server round-trip once per session to sync widget order across
+  // devices. First paint still uses localStorage — see widget-order.ts for
+  // the full flow.
+  useHydrateDashboardPrefs();
   const order = useWidgetOrder();
   const isCustomized = !isDefaultOrder(order);
 

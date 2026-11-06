@@ -48,6 +48,8 @@ export const chartsQueryKeys = {
     [...chartsQueryKeys.all, 'dated', 'global', days] as const,
   datedSection: (sectionId: string, days: number) =>
     [...chartsQueryKeys.all, 'dated', 'section', sectionId, days] as const,
+  datedInbox: (days: number) =>
+    [...chartsQueryKeys.all, 'dated', 'inbox', days] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -94,5 +96,14 @@ export async function fetchDatedSection(
     `/v1/charts/dated/sections/${encodeURIComponent(sectionId)}`,
     { params: rollingRange(days) },
   );
+  return res.data.series;
+}
+
+/// Inbox = tasks with `sectionId = null` (Tasks.md §3.4). Separate endpoint
+/// from `fetchDatedSection` so the id arg stays a plain string there.
+export async function fetchDatedInbox(days: number): Promise<DatedChartPoint[]> {
+  const res = await api.get<DatedChartSeriesResponse>('/v1/charts/dated/inbox', {
+    params: rollingRange(days),
+  });
   return res.data.series;
 }

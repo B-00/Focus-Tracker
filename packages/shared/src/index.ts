@@ -127,6 +127,18 @@ export type {
 } from './me.js';
 
 // ---------------------------------------------------------------------------
+//  Dashboard Prefs (Dashboard.md §9)
+// ---------------------------------------------------------------------------
+export {
+  dashboardPrefsResponseSchema,
+  updateDashboardPrefsRequestSchema,
+} from './dashboard-prefs.js';
+export type {
+  DashboardPrefsResponse,
+  UpdateDashboardPrefsRequest,
+} from './dashboard-prefs.js';
+
+// ---------------------------------------------------------------------------
 //  Tasks + Sections (Tasks.md)
 // ---------------------------------------------------------------------------
 export {

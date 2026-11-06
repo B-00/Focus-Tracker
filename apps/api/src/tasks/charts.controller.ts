@@ -57,4 +57,18 @@ export class ChartsController {
     const series = await this.charts.datedPerSection(user.userId, id, query);
     return { series };
   }
+
+  /// Inbox dated series — same shape as `/dated/sections/:id` but scoped to
+  /// tasks with `sectionId = NULL` (Tasks.md §3.4). Separate endpoint rather
+  /// than a sentinel id ("inbox") so the service-level ownership check
+  /// doesn't need a special case, and the URL stays human-readable.
+  @Get('dated/inbox')
+  async datedInbox(
+    @CurrentUser() user: JwtRequestContext,
+    @Query() rawQuery: Record<string, string>,
+  ): Promise<DatedChartSeriesResponse> {
+    const query: ChartRangeQuery = chartRangeQuerySchema.parse(rawQuery);
+    const series = await this.charts.datedPerSection(user.userId, null, query);
+    return { series };
+  }
 }

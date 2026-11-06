@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { TaskPriority } from '@focus-tracker/shared';
 import {
   CartesianGrid,
   Line,
@@ -37,6 +38,9 @@ export interface ChartPoint {
   backlogCount?: number;
   backlogPenalty?: number;
   baseScore?: number;
+  /// Max priority among the backlog set that day. Null when backlogCount == 0,
+  /// undefined for routine series. Drives the tooltip's "top priority" line.
+  backlogTopPriority?: TaskPriority | null;
 }
 
 interface Props {
@@ -162,6 +166,14 @@ function ChartTooltip({ active, payload }: TooltipProps<number, string>) {
           {row.backlogCount} backlog
           {row.backlogCount === 1 ? '' : ' events'} · penalty{' '}
           {fmtSigned(row.backlogPenalty ?? 0)}
+          {row.backlogTopPriority && (
+            <>
+              {' · top '}
+              <span className={PRIORITY_TOOLTIP_CLASS[row.backlogTopPriority]}>
+                {row.backlogTopPriority}
+              </span>
+            </>
+          )}
         </div>
       )}
       {row.scheduledCount === 0 && (
@@ -186,3 +198,13 @@ function fmtSigned(n: number): string {
   const s = n.toFixed(2);
   return n > 0 ? `+${s}` : s;
 }
+
+/// Priority → text class for the tooltip's "top priority" badge. Same color
+/// vocabulary as the PriorityBadge component on /tasks, inlined here so the
+/// chart doesn't pull in a full badge wrapper.
+const PRIORITY_TOOLTIP_CLASS: Record<TaskPriority, string> = {
+  extreme: 'text-rose-300 font-medium',
+  high: 'text-amber-300 font-medium',
+  mid: 'text-sky-300',
+  low: 'text-neutral-400',
+};

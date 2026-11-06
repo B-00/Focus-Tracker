@@ -6,6 +6,7 @@ import {
   CHART_RANGE_PILLS_COMPACT,
   chartsQueryKeys,
   fetchDatedGlobal,
+  fetchDatedInbox,
   fetchDatedSection,
   fetchRoutineGlobal,
   type ChartRangePill,
@@ -25,7 +26,8 @@ import {
 type Scope =
   | { kind: 'routine-global' }
   | { kind: 'dated-global' }
-  | { kind: 'dated-section'; sectionId: string };
+  | { kind: 'dated-section'; sectionId: string }
+  | { kind: 'dated-inbox' };
 
 interface Props {
   title: string;
@@ -126,16 +128,18 @@ function useChartQuery(scope: Scope, days: number) {
 function chartKey(scope: Scope, days: number): readonly unknown[] {
   if (scope.kind === 'routine-global') return chartsQueryKeys.routineGlobal(days);
   if (scope.kind === 'dated-global') return chartsQueryKeys.datedGlobal(days);
+  if (scope.kind === 'dated-inbox') return chartsQueryKeys.datedInbox(days);
   return chartsQueryKeys.datedSection(scope.sectionId, days);
 }
 
 function chartFetcher(scope: Scope, days: number): Promise<ChartPoint[]> {
   if (scope.kind === 'routine-global') return fetchRoutineGlobal(days);
   if (scope.kind === 'dated-global') return fetchDatedGlobal(days);
+  if (scope.kind === 'dated-inbox') return fetchDatedInbox(days);
   return fetchDatedSection(scope.sectionId, days);
 }
 
 function defaultColorForScope(scope: Scope): string {
   if (scope.kind === 'routine-global') return '#34d399'; // emerald-400
-  return '#38bdf8'; // sky-400 for dated
+  return '#38bdf8'; // sky-400 for dated (incl. inbox + per-section)
 }

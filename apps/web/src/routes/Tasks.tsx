@@ -226,7 +226,19 @@ function KindPanel({
         </div>
       ))}
       {/* Inbox pseudo-section — always render so the composer is available
-          even on a fresh account with no custom sections yet. */}
+          even on a fresh account with no custom sections yet. Inbox gets
+          its own Dated chart too (TaskCharts.md §3.3): dated tasks with
+          `sectionId == null` are scored just like any other section. */}
+      {kind === 'dated' && (
+        <div className="mb-2 px-2">
+          <ConsistencyChartBlock
+            title="Inbox"
+            scope={{ kind: 'dated-inbox' }}
+            height={160}
+            emptyLabel="No dated-task history in Inbox yet."
+          />
+        </div>
+      )}
       <SectionBlock
         section={null}
         tasks={byGroup.get(null) ?? []}

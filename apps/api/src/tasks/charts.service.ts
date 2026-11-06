@@ -121,19 +121,23 @@ export class ChartsService {
 
   async datedPerSection(
     userId: string,
-    sectionId: string,
+    sectionId: string | null,
     query: ChartRangeQuery,
   ): Promise<DatedChartPoint[]> {
-    // Ownership gate: section must belong to this user.
-    const section = await this.prisma.section.findFirst({
-      where: { id: sectionId, userId },
-      select: { id: true },
-    });
-    if (!section) throw new NotFoundException({ error: 'section_not_found' });
+    // Ownership gate: section must belong to this user. Inbox
+    // (sectionId == null) is implicit on every user so no row lookup.
+    if (sectionId !== null) {
+      const section = await this.prisma.section.findFirst({
+        where: { id: sectionId, userId },
+        select: { id: true },
+      });
+      if (!section) throw new NotFoundException({ error: 'section_not_found' });
+    }
 
     const { from, to } = await this.resolveRange(userId, query);
     const rows = await this.prisma.datedSectionDailyScore.findMany({
       where: {
+        userId,         // scope inbox (null sectionId) correctly across users
         sectionId,
         date: { gte: toDbDate(from), lte: toDbDate(to) },
       },
