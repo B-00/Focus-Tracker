@@ -14,6 +14,8 @@ import {
 } from '../../lib/tasks-api';
 import { PRIORITY_SORT_INDEX, PriorityBadge } from '../tasks/PriorityBadge';
 import { usePriorityColors, withAlpha } from '../tasks/priority-colors';
+import { useWidgetCollapsed } from './widget-collapse';
+import { WidgetCollapseToggle } from './WidgetCollapseToggle';
 import { WidgetReorderControls } from './WidgetReorderControls';
 
 // Dashboard widget — "Today's Routines". Mirrors TodayTasksWidget but
@@ -27,15 +29,19 @@ import { WidgetReorderControls } from './WidgetReorderControls';
 // weekday math needed here.
 
 const MAX_ROWS = 8;
+const BODY_ID = 'widget-today-routines-body';
 
 export function TodayRoutinesWidget() {
+  const collapsed = useWidgetCollapsed('today_routines');
   const routineQuery = useQuery({
     queryKey: tasksQueryKeys.list({ kind: 'routine' }),
     queryFn: () => listTasks({ kind: 'routine' }),
+    enabled: !collapsed,
   });
   const todayInstancesQuery = useQuery({
     queryKey: instancesQueryKeys.today(),
     queryFn: listTodayInstances,
+    enabled: !collapsed,
   });
 
   const rows = useMemo(() => {
@@ -68,12 +74,13 @@ export function TodayRoutinesWidget() {
 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-      <header className="mb-3 flex items-baseline justify-between gap-3">
+      <header className={`flex items-baseline justify-between gap-3 ${collapsed ? '' : 'mb-3'}`}>
         <div className="flex items-baseline gap-2">
           <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
             Today's routines
           </h2>
           <WidgetReorderControls id="today_routines" />
+          <WidgetCollapseToggle id="today_routines" controlsId={BODY_ID} />
         </div>
         <Link
           to="/tasks"
@@ -83,32 +90,36 @@ export function TodayRoutinesWidget() {
         </Link>
       </header>
 
-      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {isError && (
-        <p className="text-sm text-red-300">Couldn't load today's routines.</p>
-      )}
+      {!collapsed && (
+        <div id={BODY_ID}>
+          {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+          {isError && (
+            <p className="text-sm text-red-300">Couldn't load today's routines.</p>
+          )}
 
-      {!isLoading && !isError && rows.length === 0 && (
-        <p className="text-sm text-neutral-500">
-          No routines scheduled for today.
-        </p>
-      )}
-
-      {!isLoading && !isError && rows.length > 0 && (
-        <>
-          <ul className="flex flex-col gap-1">
-            {shown.map(({ task, instance }) => (
-              <RoutineRowCompact key={instance.id} task={task} instance={instance} />
-            ))}
-          </ul>
-          {overflow > 0 && (
-            <p className="mt-2 text-xs text-neutral-500">
-              <Link to="/tasks" className="hover:text-neutral-300">
-                +{overflow} more →
-              </Link>
+          {!isLoading && !isError && rows.length === 0 && (
+            <p className="text-sm text-neutral-500">
+              No routines scheduled for today.
             </p>
           )}
-        </>
+
+          {!isLoading && !isError && rows.length > 0 && (
+            <>
+              <ul className="flex flex-col gap-1">
+                {shown.map(({ task, instance }) => (
+                  <RoutineRowCompact key={instance.id} task={task} instance={instance} />
+                ))}
+              </ul>
+              {overflow > 0 && (
+                <p className="mt-2 text-xs text-neutral-500">
+                  <Link to="/tasks" className="hover:text-neutral-300">
+                    +{overflow} more →
+                  </Link>
+                </p>
+              )}
+            </>
+          )}
+        </div>
       )}
     </section>
   );
@@ -152,13 +163,6 @@ function RoutineRowCompact({
         title={task.title}
       >
         {task.title}
-      </span>
-      <span
-        className="shrink-0 text-[0.6rem] text-neutral-500"
-        title="Routine task — completion applies to today only"
-        aria-hidden="true"
-      >
-        ↻
       </span>
     </li>
   );

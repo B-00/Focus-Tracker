@@ -245,6 +245,11 @@ export class MaintenanceService {
   //  Step 2 — dated score snapshot (MUST run before Step 3)
   // -----------------------------------------------------------------
 
+  // ponytail: the per-section + inbox dated chart endpoints were removed
+  // from the UI. `dated_section_daily_score` rows written here are still
+  // the source of truth for the GLOBAL dated chart (it aggregates them).
+  // So this step stays essential — just no longer powers per-section
+  // views. Don't drop this or the global chart goes dark.
   private async step2_snapshotDatedScore(
     userId: string,
     tz: string,

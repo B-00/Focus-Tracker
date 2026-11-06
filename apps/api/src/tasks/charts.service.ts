@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { TaskPriority } from '@prisma/client';
 import {
   CHART_DEFAULT_RANGE_DAYS,
@@ -15,16 +15,17 @@ import { wallClockInTz } from '../activity/tz.util';
 
 /// Consistency chart reads (TaskCharts.md §6.1).
 ///
-/// Three series types, two scopes:
+/// Two series types, both global:
 ///
-///   - Per-section dated → direct range scan over dated_section_daily_score.
-///   - Global dated      → aggregate per-section rows by date, THEN re-apply
-///                          the score formula to the day's totals (not an
-///                          average — see TaskCharts.md §6.1).
-///   - Global routine    → same aggregate pattern over routine_section_daily_score.
+///   - Global dated   → aggregate per-section rows by date, THEN re-apply
+///                       the score formula to the day's totals (not an
+///                       average — see TaskCharts.md §6.1).
+///   - Global routine → same aggregate pattern over routine_section_daily_score.
 ///
-/// Per-section routine endpoint is not shipped in v1 (§3.5). Routines are
-/// explicitly global-only.
+/// ponytail: per-section + inbox dated reads (via `datedPerSection`) were
+/// dropped when the UI stopped rendering per-section charts. The underlying
+/// `dated_section_daily_score` writes still happen nightly, so reinstating
+/// the read path is a small additive change — no data gap to backfill.
 ///
 /// All ranges respect the user's timezone for the default-range window.
 /// `from` / `to` are user-local YYYY-MM-DD; the stored score rows use
@@ -117,60 +118,6 @@ export class ChartsService {
       });
     }
     return points;
-  }
-
-  async datedPerSection(
-    userId: string,
-    sectionId: string | null,
-    query: ChartRangeQuery,
-  ): Promise<DatedChartPoint[]> {
-    // Ownership gate: section must belong to this user. Inbox
-    // (sectionId == null) is implicit on every user so no row lookup.
-    if (sectionId !== null) {
-      const section = await this.prisma.section.findFirst({
-        where: { id: sectionId, userId },
-        select: { id: true },
-      });
-      if (!section) throw new NotFoundException({ error: 'section_not_found' });
-    }
-
-    const { from, to } = await this.resolveRange(userId, query);
-    const rows = await this.prisma.datedSectionDailyScore.findMany({
-      where: {
-        userId,         // scope inbox (null sectionId) correctly across users
-        sectionId,
-        date: { gte: toDbDate(from), lte: toDbDate(to) },
-      },
-      orderBy: { date: 'asc' },
-      select: {
-        date: true,
-        scheduledCount: true,
-        completedCount: true,
-        scheduledWeight: true,
-        completedWeight: true,
-        backlogCount: true,
-        backlogTopPriority: true,
-        baseScore: true,
-        backlogPenalty: true,
-        score: true,
-        runningTotal: true,
-      },
-    });
-
-    // Per-section is a direct range scan — no re-aggregation needed.
-    return rows.map((r) => ({
-      date: dateToYmd(r.date),
-      scheduledCount: r.scheduledCount,
-      completedCount: r.completedCount,
-      scheduledWeight: Number(r.scheduledWeight),
-      completedWeight: Number(r.completedWeight),
-      backlogCount: r.backlogCount,
-      backlogTopPriority: r.backlogTopPriority,
-      baseScore: Number(r.baseScore),
-      backlogPenalty: Number(r.backlogPenalty),
-      score: Number(r.score),
-      runningTotal: Number(r.runningTotal),
-    }));
   }
 
   // -----------------------------------------------------------------

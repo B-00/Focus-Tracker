@@ -37,6 +37,21 @@ export const WIDGET_IDS = [
 ] as const;
 export type WidgetId = (typeof WIDGET_IDS)[number];
 
+/// Human-readable names for the visibility menu. Keep in sync with any
+/// headings the widgets themselves render, but these labels drive the
+/// settings UI, not the widget chrome — there's one source of truth
+/// per surface on purpose.
+export const WIDGET_LABELS: Record<WidgetId, string> = {
+  focus_session: 'Focus Session',
+  today_tasks: "Today's tasks",
+  today_routines: "Today's routines",
+  ongoing_tasks: 'Ongoing tasks',
+  backlog: 'Backlog',
+  routine_chart: 'Routine consistency',
+  dated_chart: 'Dated consistency',
+  today_activity: "Today's activity",
+};
+
 /// Default order matches the user's preferred "action-first" stack:
 /// focus session up top (if active it's the single most relevant thing on
 /// the dashboard; if not, Start is still a click away), then today's

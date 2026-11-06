@@ -9,7 +9,12 @@ import {
 } from '../../lib/focus-sessions-api';
 import { Modal } from '../../components/Modal';
 import { formatDuration } from '../../lib/format-duration';
-import { listTasks, tasksQueryKeys } from '../../lib/tasks-api';
+import {
+  instancesQueryKeys,
+  listTasks,
+  listTodayInstances,
+  tasksQueryKeys,
+} from '../../lib/tasks-api';
 
 // Shared "Start Session" form used by the dashboard widget AND the /focus
 // route (FocusSession.md §8.1 / §8.2). Owns:
@@ -52,9 +57,25 @@ export function StartSessionForm({
     queryFn: () => listTasks(),
     staleTime: 30_000,
   });
+  // Today's instances — needed for routines, where completion is per-day
+  // on the instance, not on the parent Task row. Same query key the
+  // TodayRoutinesWidget uses, so no extra network round-trip.
+  const todayInstancesQuery = useQuery({
+    queryKey: instancesQueryKeys.today(),
+    queryFn: listTodayInstances,
+    staleTime: 30_000,
+  });
+  const completedRoutineTodayIds = new Set(
+    (todayInstancesQuery.data ?? [])
+      .filter((i) => i.completedAt !== null)
+      .map((i) => i.taskId),
+  );
   const incompleteTasks = (tasksQuery.data ?? [])
     .filter((t): t is TaskResponse =>
-      t.completedAt === null && t.archivedAt === null,
+      t.completedAt === null &&
+      t.archivedAt === null &&
+      // Routines: hide if today's instance is already checked off.
+      !completedRoutineTodayIds.has(t.id),
     )
     .sort((a, b) => a.title.localeCompare(b.title));
 

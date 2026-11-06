@@ -13,6 +13,8 @@ import {
   useWidgetOrder,
   type WidgetId,
 } from './dashboard/widget-order';
+import { useHiddenWidgets } from './dashboard/widget-visibility';
+import { WidgetVisibilityMenu } from './dashboard/WidgetVisibilityMenu';
 
 // Dashboard = composition surface (Dashboard.md §3). Owns zero feature
 // behavior; it just renders widgets in whatever order the user has set.
@@ -43,7 +45,9 @@ export function DashboardPage() {
   // the full flow.
   useHydrateDashboardPrefs();
   const order = useWidgetOrder();
+  const hidden = useHiddenWidgets();
   const isCustomized = !isDefaultOrder(order);
+  const visibleOrder = order.filter((id) => !hidden.has(id));
 
   return (
     <main className="mx-auto flex min-h-full max-w-2xl flex-col gap-4 px-6 py-8">
@@ -54,19 +58,28 @@ export function DashboardPage() {
             Reorder widgets with the ▲▼ arrows in each header.
           </p>
         </div>
-        {isCustomized && (
-          <button
-            type="button"
-            onClick={resetWidgetOrder}
-            className="mt-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
-            title="Restore default widget order"
-          >
-            Reset order
-          </button>
-        )}
+        <div className="flex items-start gap-2">
+          {isCustomized && (
+            <button
+              type="button"
+              onClick={resetWidgetOrder}
+              className="mt-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+              title="Restore default widget order"
+            >
+              Reset order
+            </button>
+          )}
+          <WidgetVisibilityMenu />
+        </div>
       </header>
 
-      {order.map((id) => {
+      {visibleOrder.length === 0 && (
+        <p className="rounded-lg border border-dashed border-neutral-800 bg-neutral-950 px-4 py-6 text-center text-sm text-neutral-500">
+          No widgets visible. Turn some back on from the Widgets menu above.
+        </p>
+      )}
+
+      {visibleOrder.map((id) => {
         const W = WIDGET_MAP[id];
         return <W key={id} />;
       })}

@@ -19,7 +19,6 @@ import {
   tasksQueryKeys,
 } from '../lib/tasks-api';
 import { BacklogRow } from './tasks/BacklogRow';
-import { ConsistencyChartBlock } from './charts/ConsistencyChartBlock';
 import { PRIORITY_SORT_INDEX } from './tasks/PriorityBadge';
 import { PriorityColorPicker } from './tasks/PriorityColorPicker';
 import { RoutineRow } from './tasks/RoutineRow';
@@ -203,42 +202,16 @@ function KindPanel({
       </header>
 
       {sections.map((s) => (
-        <div key={s.id}>
-          {/* Per-Section Dated chart (TaskCharts.md §3.2). Routine and
-              Ongoing panels don't get per-Section charts — globals only. */}
-          {kind === 'dated' && (
-            <div className="mb-2 px-2">
-              <ConsistencyChartBlock
-                title={s.name}
-                scope={{ kind: 'dated-section', sectionId: s.id }}
-                lineColor={s.color}
-                height={160}
-                emptyLabel={`No dated-task history for ${s.name} yet.`}
-              />
-            </div>
-          )}
-          <SectionBlock
-            section={s}
-            tasks={byGroup.get(s.id) ?? []}
-            kindForComposer={kind}
-            renderRow={renderRow}
-          />
-        </div>
+        <SectionBlock
+          key={s.id}
+          section={s}
+          tasks={byGroup.get(s.id) ?? []}
+          kindForComposer={kind}
+          renderRow={renderRow}
+        />
       ))}
       {/* Inbox pseudo-section — always render so the composer is available
-          even on a fresh account with no custom sections yet. Inbox gets
-          its own Dated chart too (TaskCharts.md §3.3): dated tasks with
-          `sectionId == null` are scored just like any other section. */}
-      {kind === 'dated' && (
-        <div className="mb-2 px-2">
-          <ConsistencyChartBlock
-            title="Inbox"
-            scope={{ kind: 'dated-inbox' }}
-            height={160}
-            emptyLabel="No dated-task history in Inbox yet."
-          />
-        </div>
-      )}
+          even on a fresh account with no custom sections yet. */}
       <SectionBlock
         section={null}
         tasks={byGroup.get(null) ?? []}

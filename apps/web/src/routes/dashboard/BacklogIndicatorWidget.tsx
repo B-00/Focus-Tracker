@@ -3,6 +3,8 @@ import { Link } from '@tanstack/react-router';
 import type { TaskPriority } from '@focus-tracker/shared';
 import { backlogQueryKeys, listBacklog } from '../../lib/tasks-api';
 import { usePriorityColors } from '../tasks/priority-colors';
+import { useWidgetCollapsed } from './widget-collapse';
+import { WidgetCollapseToggle } from './WidgetCollapseToggle';
 import { WidgetReorderControls } from './WidgetReorderControls';
 
 // Dashboard widget — "Backlog indicator" (Tasks.md §4.2 item 3 /
@@ -18,8 +20,10 @@ import { WidgetReorderControls } from './WidgetReorderControls';
 // one fetch covers all three surfaces.
 
 const PRIORITY_ORDER: TaskPriority[] = ['extreme', 'high', 'mid', 'low'];
+const BODY_ID = 'widget-backlog-body';
 
 export function BacklogIndicatorWidget() {
+  const collapsed = useWidgetCollapsed('backlog');
   const query = useQuery({
     queryKey: backlogQueryKeys.list(),
     queryFn: () => listBacklog(),
@@ -42,12 +46,13 @@ export function BacklogIndicatorWidget() {
       {/* Header lives outside the Link wrapping the body so the reorder
           arrows aren't nested inside an <a> (invalid HTML + swallows
           clicks). The body + stripe below remain one big click target. */}
-      <header className="mb-2 flex items-baseline justify-between gap-3">
+      <header className={`flex items-baseline justify-between gap-3 ${collapsed ? '' : 'mb-2'}`}>
         <div className="flex items-baseline gap-2">
           <h2 className="text-sm font-medium uppercase tracking-wider text-amber-300">
             Backlog
           </h2>
           <WidgetReorderControls id="backlog" />
+          <WidgetCollapseToggle id="backlog" controlsId={BODY_ID} />
           <span className="text-xs text-amber-400/80">
             {total} task{total === 1 ? '' : 's'} missed
           </span>
@@ -60,8 +65,10 @@ export function BacklogIndicatorWidget() {
         </Link>
       </header>
 
+      {!collapsed && (
       <Link
         to="/backlog"
+        id={BODY_ID}
         className="group block rounded transition-colors hover:bg-amber-500/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
         aria-label={`Open backlog — ${total} task${total === 1 ? '' : 's'}`}
       >
@@ -113,6 +120,7 @@ export function BacklogIndicatorWidget() {
           })}
         </div>
       </Link>
+      )}
     </section>
   );
 }

@@ -6,6 +6,8 @@ import {
 } from '../../lib/activity-api';
 import { formatDuration } from '../../lib/format-duration';
 import { TopTargetsList } from '../activity/TopTargetsList';
+import { useWidgetCollapsed } from './widget-collapse';
+import { WidgetCollapseToggle } from './WidgetCollapseToggle';
 import { WidgetReorderControls } from './WidgetReorderControls';
 
 // Compact dashboard widget — "Today's activity" (Activity.md §4.2).
@@ -20,23 +22,27 @@ const POLL_INTERVAL_MS = 60_000;
 // spec called for 3 here to keep the widget glance-short; the visual
 // symmetry won out.
 const TOP_N = 5;
+const BODY_ID = 'widget-today-activity-body';
 
 export function TodayActivityWidget() {
+  const collapsed = useWidgetCollapsed('today_activity');
   const { data, isLoading, isError, error } = useQuery({
     queryKey: activityQueryKeys.summary('today'),
     queryFn: () => fetchActivitySummary('today'),
     refetchInterval: POLL_INTERVAL_MS,
     refetchOnWindowFocus: true,
+    enabled: !collapsed,
   });
 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-      <header className="mb-4 flex items-baseline justify-between gap-3">
+      <header className={`flex items-baseline justify-between gap-3 ${collapsed ? '' : 'mb-4'}`}>
         <div className="flex items-baseline gap-2">
           <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
             Today's activity
           </h2>
           <WidgetReorderControls id="today_activity" />
+          <WidgetCollapseToggle id="today_activity" controlsId={BODY_ID} />
         </div>
         <Link
           to="/activity"
@@ -46,16 +52,18 @@ export function TodayActivityWidget() {
         </Link>
       </header>
 
-      {isLoading && <p className="text-sm text-neutral-300">Loading…</p>}
+      {!collapsed && (
+        <div id={BODY_ID}>
+          {isLoading && <p className="text-sm text-neutral-300">Loading…</p>}
 
-      {isError && (
-        <p className="text-sm text-red-300">
-          {error instanceof Error ? error.message : 'Failed to load activity.'}
-        </p>
-      )}
+          {isError && (
+            <p className="text-sm text-red-300">
+              {error instanceof Error ? error.message : 'Failed to load activity.'}
+            </p>
+          )}
 
-      {data && (
-        <div className="space-y-4">
+          {data && (
+            <div className="space-y-4">
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-[0.65rem] uppercase tracking-wider text-neutral-500">
               Active so far
@@ -87,6 +95,8 @@ export function TodayActivityWidget() {
               variant="compact"
             />
           </div>
+            </div>
+          )}
         </div>
       )}
     </section>

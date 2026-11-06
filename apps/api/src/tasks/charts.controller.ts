@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import {
   chartRangeQuerySchema,
   type ChartRangeQuery,
@@ -14,14 +14,12 @@ import { ChartsService } from './charts.service';
 ///
 ///   GET /v1/charts/routine/global
 ///   GET /v1/charts/dated/global
-///   GET /v1/charts/dated/sections/:id
 ///
-/// Spec §7 lists the per-section path as
-/// `/v1/sections/{id}/dated-stats` — kept together under /v1/charts here
-/// so all chart surface routes live in one controller and the routing
-/// matches the UI's mental model ("there's a /charts namespace").
-/// This is a naming-only departure, documented so it doesn't drift from
-/// the spec silently.
+/// ponytail: per-section + inbox dated endpoints were removed when
+/// `/tasks` shipped with globals-only charts (no per-section UI). The
+/// `dated_section_daily_score` table + its nightly writer are still in
+/// place so this is a UI-layer deletion only; reinstating the endpoint
+/// would be a one-file add if per-section charts come back.
 @Controller('charts')
 @UseGuards(JwtAuthGuard)
 export class ChartsController {
@@ -47,28 +45,4 @@ export class ChartsController {
     return { series };
   }
 
-  @Get('dated/sections/:id')
-  async datedPerSection(
-    @CurrentUser() user: JwtRequestContext,
-    @Param('id') id: string,
-    @Query() rawQuery: Record<string, string>,
-  ): Promise<DatedChartSeriesResponse> {
-    const query: ChartRangeQuery = chartRangeQuerySchema.parse(rawQuery);
-    const series = await this.charts.datedPerSection(user.userId, id, query);
-    return { series };
-  }
-
-  /// Inbox dated series — same shape as `/dated/sections/:id` but scoped to
-  /// tasks with `sectionId = NULL` (Tasks.md §3.4). Separate endpoint rather
-  /// than a sentinel id ("inbox") so the service-level ownership check
-  /// doesn't need a special case, and the URL stays human-readable.
-  @Get('dated/inbox')
-  async datedInbox(
-    @CurrentUser() user: JwtRequestContext,
-    @Query() rawQuery: Record<string, string>,
-  ): Promise<DatedChartSeriesResponse> {
-    const query: ChartRangeQuery = chartRangeQuerySchema.parse(rawQuery);
-    const series = await this.charts.datedPerSection(user.userId, null, query);
-    return { series };
-  }
 }

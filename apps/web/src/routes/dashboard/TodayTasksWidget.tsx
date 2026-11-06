@@ -9,6 +9,8 @@ import {
 } from '../../lib/tasks-api';
 import { PRIORITY_SORT_INDEX, PriorityBadge } from '../tasks/PriorityBadge';
 import { usePriorityColors, withAlpha } from '../tasks/priority-colors';
+import { useWidgetCollapsed } from './widget-collapse';
+import { WidgetCollapseToggle } from './WidgetCollapseToggle';
 import { WidgetReorderControls } from './WidgetReorderControls';
 
 // Dashboard widget — "Today's Tasks". Compact list of dated tasks where
@@ -24,12 +26,17 @@ import { WidgetReorderControls } from './WidgetReorderControls';
 
 const MAX_ROWS = 8;
 
+const BODY_ID = 'widget-today-tasks-body';
+
 export function TodayTasksWidget() {
   const today = todayYmd();
+  const collapsed = useWidgetCollapsed('today_tasks');
 
   const query = useQuery({
     queryKey: tasksQueryKeys.list({ kind: 'dated' }),
     queryFn: () => listTasks({ kind: 'dated' }),
+    // No point polling the list when the widget is folded up.
+    enabled: !collapsed,
   });
 
   const rows = useMemo(() => {
@@ -56,12 +63,13 @@ export function TodayTasksWidget() {
 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-      <header className="mb-3 flex items-baseline justify-between gap-3">
+      <header className={`flex items-baseline justify-between gap-3 ${collapsed ? '' : 'mb-3'}`}>
         <div className="flex items-baseline gap-2">
           <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
             Today's tasks
           </h2>
           <WidgetReorderControls id="today_tasks" />
+          <WidgetCollapseToggle id="today_tasks" controlsId={BODY_ID} />
         </div>
         <Link
           to="/tasks"
@@ -71,36 +79,40 @@ export function TodayTasksWidget() {
         </Link>
       </header>
 
-      {query.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {query.isError && (
-        <p className="text-sm text-red-300">Couldn't load today's tasks.</p>
-      )}
+      {!collapsed && (
+        <div id={BODY_ID}>
+          {query.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+          {query.isError && (
+            <p className="text-sm text-red-300">Couldn't load today's tasks.</p>
+          )}
 
-      {!query.isLoading && !query.isError && rows.length === 0 && (
-        <p className="text-sm text-neutral-500">
-          Nothing dated for today. Add a task on{' '}
-          <Link to="/tasks" className="text-neutral-300 underline">
-            /tasks
-          </Link>
-          .
-        </p>
-      )}
-
-      {!query.isLoading && !query.isError && rows.length > 0 && (
-        <>
-          <ul className="flex flex-col gap-1">
-            {shown.map((task) => (
-              <DatedRowCompact key={task.id} task={task} />
-            ))}
-          </ul>
-          {overflow > 0 && (
-            <p className="mt-2 text-xs text-neutral-500">
-              <Link to="/tasks" className="hover:text-neutral-300">
-                +{overflow} more →
+          {!query.isLoading && !query.isError && rows.length === 0 && (
+            <p className="text-sm text-neutral-500">
+              Nothing dated for today. Add a task on{' '}
+              <Link to="/tasks" className="text-neutral-300 underline">
+                /tasks
               </Link>
+              .
             </p>
           )}
-        </>
+
+          {!query.isLoading && !query.isError && rows.length > 0 && (
+            <>
+              <ul className="flex flex-col gap-1">
+                {shown.map((task) => (
+                  <DatedRowCompact key={task.id} task={task} />
+                ))}
+              </ul>
+              {overflow > 0 && (
+                <p className="mt-2 text-xs text-neutral-500">
+                  <Link to="/tasks" className="hover:text-neutral-300">
+                    +{overflow} more →
+                  </Link>
+                </p>
+              )}
+            </>
+          )}
+        </div>
       )}
     </section>
   );

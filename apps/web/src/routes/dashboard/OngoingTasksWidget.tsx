@@ -9,6 +9,8 @@ import {
 } from '../../lib/tasks-api';
 import { PRIORITY_SORT_INDEX, PriorityBadge } from '../tasks/PriorityBadge';
 import { usePriorityColors, withAlpha } from '../tasks/priority-colors';
+import { useWidgetCollapsed } from './widget-collapse';
+import { WidgetCollapseToggle } from './WidgetCollapseToggle';
 import { WidgetReorderControls } from './WidgetReorderControls';
 
 // Dashboard widget — "Ongoing Tasks" (Tasks.md §4.2 item 2 /
@@ -20,11 +22,14 @@ import { WidgetReorderControls } from './WidgetReorderControls';
 // having /tasks open doesn't double-fetch.
 
 const MAX_ROWS = 6;
+const BODY_ID = 'widget-ongoing-tasks-body';
 
 export function OngoingTasksWidget() {
+  const collapsed = useWidgetCollapsed('ongoing_tasks');
   const query = useQuery({
     queryKey: tasksQueryKeys.list({ kind: 'ongoing' }),
     queryFn: () => listTasks({ kind: 'ongoing' }),
+    enabled: !collapsed,
   });
 
   const rows = useMemo(() => {
@@ -43,12 +48,13 @@ export function OngoingTasksWidget() {
 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-      <header className="mb-3 flex items-baseline justify-between gap-3">
+      <header className={`flex items-baseline justify-between gap-3 ${collapsed ? '' : 'mb-3'}`}>
         <div className="flex items-baseline gap-2">
           <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
             Ongoing tasks
           </h2>
           <WidgetReorderControls id="ongoing_tasks" />
+          <WidgetCollapseToggle id="ongoing_tasks" controlsId={BODY_ID} />
         </div>
         <Link
           to="/tasks"
@@ -58,36 +64,40 @@ export function OngoingTasksWidget() {
         </Link>
       </header>
 
-      {query.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {query.isError && (
-        <p className="text-sm text-red-300">Couldn't load ongoing tasks.</p>
-      )}
+      {!collapsed && (
+        <div id={BODY_ID}>
+          {query.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+          {query.isError && (
+            <p className="text-sm text-red-300">Couldn't load ongoing tasks.</p>
+          )}
 
-      {!query.isLoading && !query.isError && rows.length === 0 && (
-        <p className="text-sm text-neutral-500">
-          No ongoing tasks. Add one on{' '}
-          <Link to="/tasks" className="text-neutral-300 underline">
-            /tasks
-          </Link>
-          .
-        </p>
-      )}
-
-      {!query.isLoading && !query.isError && rows.length > 0 && (
-        <>
-          <ul className="flex flex-col gap-1">
-            {shown.map((t) => (
-              <OngoingRowCompact key={t.id} task={t} />
-            ))}
-          </ul>
-          {overflow > 0 && (
-            <p className="mt-2 text-xs text-neutral-500">
-              <Link to="/tasks" className="hover:text-neutral-300">
-                +{overflow} more →
+          {!query.isLoading && !query.isError && rows.length === 0 && (
+            <p className="text-sm text-neutral-500">
+              No ongoing tasks. Add one on{' '}
+              <Link to="/tasks" className="text-neutral-300 underline">
+                /tasks
               </Link>
+              .
             </p>
           )}
-        </>
+
+          {!query.isLoading && !query.isError && rows.length > 0 && (
+            <>
+              <ul className="flex flex-col gap-1">
+                {shown.map((t) => (
+                  <OngoingRowCompact key={t.id} task={t} />
+                ))}
+              </ul>
+              {overflow > 0 && (
+                <p className="mt-2 text-xs text-neutral-500">
+                  <Link to="/tasks" className="hover:text-neutral-300">
+                    +{overflow} more →
+                  </Link>
+                </p>
+              )}
+            </>
+          )}
+        </div>
       )}
     </section>
   );

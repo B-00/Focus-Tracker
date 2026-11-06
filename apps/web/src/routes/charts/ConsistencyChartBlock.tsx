@@ -6,8 +6,6 @@ import {
   CHART_RANGE_PILLS_COMPACT,
   chartsQueryKeys,
   fetchDatedGlobal,
-  fetchDatedInbox,
-  fetchDatedSection,
   fetchRoutineGlobal,
   type ChartRangePill,
 } from '../../lib/charts-api';
@@ -25,17 +23,14 @@ import {
 
 type Scope =
   | { kind: 'routine-global' }
-  | { kind: 'dated-global' }
-  | { kind: 'dated-section'; sectionId: string }
-  | { kind: 'dated-inbox' };
+  | { kind: 'dated-global' };
 
 interface Props {
   title: string;
   /// Which series to load.
   scope: Scope;
   /// Chart tint. Routines default to emerald (positive-habit feel), dated
-  /// default to sky-blue (project-work feel). Per-section dated can be
-  /// overridden to the Section accent color.
+  /// default to sky-blue (project-work feel).
   lineColor?: string;
   /// Height of the chart body in pixels. Defaults 240; dashboard
   /// variants pass a smaller value.
@@ -49,6 +44,14 @@ interface Props {
   /// Shown in place of the chart body when the server returns an
   /// empty series. Default: "Not enough data yet — keep at it."
   emptyLabel?: React.ReactNode;
+  /// When true, hide the chart body + range pills — only the header
+  /// strip (title + headerRight) stays visible. Used by dashboard
+  /// variants to fold the widget down to a one-line strip. Also skips
+  /// the data fetch since there's nothing to render.
+  collapsed?: boolean;
+  /// Id applied to the chart body, so an external toggle in
+  /// `headerRight` can use aria-controls to point here.
+  bodyId?: string;
 }
 
 export function ConsistencyChartBlock({
@@ -59,50 +62,58 @@ export function ConsistencyChartBlock({
   compact = false,
   headerRight,
   emptyLabel,
+  collapsed = false,
+  bodyId,
 }: Props) {
   const defaultPill: ChartRangePill = compact ? '1M' : '3M';
   const [pill, setPill] = useState<ChartRangePill>(defaultPill);
   const days = CHART_RANGE_DAYS[pill];
 
-  const query = useChartQuery(scope, days);
+  const query = useChartQuery(scope, days, !collapsed);
 
   const resolvedColor = lineColor ?? defaultColorForScope(scope);
   const pills = compact ? CHART_RANGE_PILLS_COMPACT : CHART_RANGE_PILLS;
 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-      <header className="mb-3 flex items-center justify-between gap-3">
+      <header className={`flex items-center justify-between gap-3 ${collapsed ? '' : 'mb-3'}`}>
         <div className="flex items-baseline gap-3">
           <h3 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
             {title}
           </h3>
-          <ChartRangePills value={pill} onChange={setPill} options={pills} />
+          {!collapsed && (
+            <ChartRangePills value={pill} onChange={setPill} options={pills} />
+          )}
         </div>
         {headerRight}
       </header>
-      {query.isLoading && (
-        <div
-          className="flex items-center justify-center text-xs text-neutral-500"
-          style={{ height }}
-        >
-          Loading…
+      {!collapsed && (
+        <div id={bodyId}>
+          {query.isLoading && (
+            <div
+              className="flex items-center justify-center text-xs text-neutral-500"
+              style={{ height }}
+            >
+              Loading…
+            </div>
+          )}
+          {query.isError && (
+            <div
+              className="flex items-center justify-center text-xs text-red-300"
+              style={{ height }}
+            >
+              Couldn't load chart.
+            </div>
+          )}
+          {query.data && (
+            <CumulativeScoreChart
+              series={query.data}
+              height={height}
+              lineColor={resolvedColor}
+              emptyLabel={emptyLabel}
+            />
+          )}
         </div>
-      )}
-      {query.isError && (
-        <div
-          className="flex items-center justify-center text-xs text-red-300"
-          style={{ height }}
-        >
-          Couldn't load chart.
-        </div>
-      )}
-      {query.data && (
-        <CumulativeScoreChart
-          series={query.data}
-          height={height}
-          lineColor={resolvedColor}
-          emptyLabel={emptyLabel}
-        />
       )}
     </section>
   );
@@ -112,7 +123,7 @@ export function ConsistencyChartBlock({
 //  Query selection
 // ---------------------------------------------------------------------------
 
-function useChartQuery(scope: Scope, days: number) {
+function useChartQuery(scope: Scope, days: number, enabled: boolean) {
   // Each hook call is stable-keyed on scope + days; conditional
   // queryKey selection below keeps the hook-ordering invariants happy.
   const key = chartKey(scope, days);
@@ -122,24 +133,21 @@ function useChartQuery(scope: Scope, days: number) {
     // Scores don't change intra-day (nightly job writes them); stale
     // after 60s is plenty to avoid chatter on tab-focus flips.
     staleTime: 60_000,
+    enabled,
   });
 }
 
 function chartKey(scope: Scope, days: number): readonly unknown[] {
   if (scope.kind === 'routine-global') return chartsQueryKeys.routineGlobal(days);
-  if (scope.kind === 'dated-global') return chartsQueryKeys.datedGlobal(days);
-  if (scope.kind === 'dated-inbox') return chartsQueryKeys.datedInbox(days);
-  return chartsQueryKeys.datedSection(scope.sectionId, days);
+  return chartsQueryKeys.datedGlobal(days);
 }
 
 function chartFetcher(scope: Scope, days: number): Promise<ChartPoint[]> {
   if (scope.kind === 'routine-global') return fetchRoutineGlobal(days);
-  if (scope.kind === 'dated-global') return fetchDatedGlobal(days);
-  if (scope.kind === 'dated-inbox') return fetchDatedInbox(days);
-  return fetchDatedSection(scope.sectionId, days);
+  return fetchDatedGlobal(days);
 }
 
 function defaultColorForScope(scope: Scope): string {
   if (scope.kind === 'routine-global') return '#34d399'; // emerald-400
-  return '#38bdf8'; // sky-400 for dated (incl. inbox + per-section)
+  return '#38bdf8'; // sky-400 for dated
 }

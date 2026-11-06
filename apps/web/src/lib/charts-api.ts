@@ -18,14 +18,21 @@ import { api } from './api';
 //  Range selector
 // ---------------------------------------------------------------------------
 
-/// The four range pills the UI exposes. Pre-resolved to a day count here
+/// The range pills the UI exposes. Pre-resolved to a day count here
 /// (server accepts explicit `from` / `to`, no pill-name mapping needed
 /// server-side). "All" is represented as the chart's max (365d — the API
 /// clamps anything larger).
-export const CHART_RANGE_PILLS = ['1M', '3M', '6M', '1Y'] as const;
+///
+/// ponytail: 1D renders a single data point (scores post nightly, so a
+/// line chart with one dot). That's expected — a user who picks 1D is
+/// explicitly asking for "just today". Recharts handles the degenerate
+/// case fine.
+export const CHART_RANGE_PILLS = ['1D', '1W', '1M', '3M', '6M', '1Y'] as const;
 export type ChartRangePill = (typeof CHART_RANGE_PILLS)[number];
 
 export const CHART_RANGE_DAYS: Record<ChartRangePill, number> = {
+  '1D': 1,
+  '1W': 7,
   '1M': 30,
   '3M': 90,
   '6M': 180,
@@ -46,10 +53,6 @@ export const chartsQueryKeys = {
     [...chartsQueryKeys.all, 'routine', 'global', days] as const,
   datedGlobal: (days: number) =>
     [...chartsQueryKeys.all, 'dated', 'global', days] as const,
-  datedSection: (sectionId: string, days: number) =>
-    [...chartsQueryKeys.all, 'dated', 'section', sectionId, days] as const,
-  datedInbox: (days: number) =>
-    [...chartsQueryKeys.all, 'dated', 'inbox', days] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -83,26 +86,6 @@ export async function fetchRoutineGlobal(days: number): Promise<RoutineChartPoin
 
 export async function fetchDatedGlobal(days: number): Promise<DatedChartPoint[]> {
   const res = await api.get<DatedChartSeriesResponse>('/v1/charts/dated/global', {
-    params: rollingRange(days),
-  });
-  return res.data.series;
-}
-
-export async function fetchDatedSection(
-  sectionId: string,
-  days: number,
-): Promise<DatedChartPoint[]> {
-  const res = await api.get<DatedChartSeriesResponse>(
-    `/v1/charts/dated/sections/${encodeURIComponent(sectionId)}`,
-    { params: rollingRange(days) },
-  );
-  return res.data.series;
-}
-
-/// Inbox = tasks with `sectionId = null` (Tasks.md §3.4). Separate endpoint
-/// from `fetchDatedSection` so the id arg stays a plain string there.
-export async function fetchDatedInbox(days: number): Promise<DatedChartPoint[]> {
-  const res = await api.get<DatedChartSeriesResponse>('/v1/charts/dated/inbox', {
     params: rollingRange(days),
   });
   return res.data.series;
