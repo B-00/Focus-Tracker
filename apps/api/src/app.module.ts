@@ -10,6 +10,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 import { ActivityModule } from './activity/activity.module';
 import { SectionsModule } from './sections/sections.module';
 import { TasksModule } from './tasks/tasks.module';
+import { FocusSessionsModule } from './focus-sessions/focus-sessions.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { TasksModule } from './tasks/tasks.module';
     ActivityModule,
     SectionsModule,
     TasksModule,
+    FocusSessionsModule,
     HealthModule,
   ],
 })

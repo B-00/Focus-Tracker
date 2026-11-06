@@ -203,6 +203,36 @@ export type {
 } from './charts.js';
 
 // ---------------------------------------------------------------------------
+//  Focus Sessions (FocusSession.md)
+// ---------------------------------------------------------------------------
+export {
+  FOCUS_SESSION_ERROR_CODES,
+  focusSessionPauseResponseSchema,
+  focusSessionResponseSchema,
+  focusSessionListItemSchema,
+  focusSessionListResponseSchema,
+  focusSessionCurrentResponseSchema,
+  startFocusSessionRequestSchema,
+  sessionAlreadyActiveResponseSchema,
+  focusSessionListQuerySchema,
+  sumPauseMs,
+  wallClockMs,
+  effectiveMs,
+  isActiveState,
+} from './focus-sessions.js';
+export type {
+  FocusSessionErrorCode,
+  FocusSessionPauseResponse,
+  FocusSessionResponse,
+  FocusSessionListItem,
+  FocusSessionListResponse,
+  FocusSessionCurrentResponse,
+  StartFocusSessionRequest,
+  SessionAlreadyActiveResponse,
+  FocusSessionListQuery,
+} from './focus-sessions.js';
+
+// ---------------------------------------------------------------------------
 //  Pairing + Devices (Auth.md §5)
 // ---------------------------------------------------------------------------
 export {
