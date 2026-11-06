@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   SectionResponse,
@@ -7,14 +8,17 @@ import type {
   TaskResponse,
 } from '@focus-tracker/shared';
 import {
+  backlogQueryKeys,
   createSection,
   instancesQueryKeys,
+  listBacklog,
   listSections,
   listTasks,
   listTodayInstances,
   sectionsQueryKeys,
   tasksQueryKeys,
 } from '../lib/tasks-api';
+import { BacklogRow } from './tasks/BacklogRow';
 import { PRIORITY_SORT_INDEX } from './tasks/PriorityBadge';
 import { PriorityColorPicker } from './tasks/PriorityColorPicker';
 import { RoutineRow } from './tasks/RoutineRow';
@@ -51,6 +55,13 @@ export function TasksPage() {
   const todayInstancesQuery = useQuery({
     queryKey: instancesQueryKeys.today(),
     queryFn: listTodayInstances,
+  });
+  // Backlog panel appears below the kind panels only when non-empty
+  // (Tasks.md §4.1). Shares its cache key with the AppShell nav badge
+  // and the /backlog page, so there's no duplicate fetch.
+  const backlogPanelQuery = useQuery({
+    queryKey: backlogQueryKeys.list(),
+    queryFn: () => listBacklog(),
   });
 
   const isLoading =
@@ -106,6 +117,9 @@ export function TasksPage() {
             tasks={ongoingQuery.data ?? []}
             sections={sectionsQuery.data ?? []}
           />
+          {backlogPanelQuery.data && backlogPanelQuery.data.tasks.length > 0 && (
+            <BacklogPanel tasks={backlogPanelQuery.data.tasks} />
+          )}
           <PriorityColorPicker />
         </div>
       )}
@@ -202,6 +216,47 @@ function KindPanel({
         kindForComposer={kind}
         renderRow={renderRow}
       />
+    </section>
+  );
+}
+
+// Compact Backlog panel for /tasks (Tasks.md §4.1). Rendered only when
+// at least one task is backlogged. Shows the top N rows inline and
+// links to the full /backlog page for everything else.
+function BacklogPanel({ tasks }: { tasks: TaskResponse[] }) {
+  const INLINE_LIMIT = 10;
+  const shown = tasks.slice(0, INLINE_LIMIT);
+  const overflow = tasks.length - shown.length;
+  return (
+    <section>
+      <header className="mb-3 flex items-baseline justify-between gap-2 border-b border-neutral-800 pb-1">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-neutral-200">
+            Backlog
+          </h2>
+          <span className="text-xs text-neutral-500">
+            {tasks.length === 1 ? '1 task' : `${tasks.length} tasks`}
+          </span>
+        </div>
+        <Link
+          to="/backlog"
+          className="text-xs text-neutral-400 hover:text-neutral-200"
+        >
+          Open backlog →
+        </Link>
+      </header>
+      <ul className="flex flex-col gap-1">
+        {shown.map((t) => (
+          <BacklogRow key={t.id} task={t} />
+        ))}
+      </ul>
+      {overflow > 0 && (
+        <p className="mt-2 text-xs text-neutral-500">
+          <Link to="/backlog" className="underline hover:text-neutral-300">
+            +{overflow} more in /backlog
+          </Link>
+        </p>
+      )}
     </section>
   );
 }

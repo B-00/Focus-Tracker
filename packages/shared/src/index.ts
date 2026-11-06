@@ -140,6 +140,11 @@ export {
   listTasksQuerySchema,
   taskInstanceResponseSchema,
   updateInstanceRequestSchema,
+  redateRequestSchema,
+  backlogListQuerySchema,
+  backlogListResponseSchema,
+  backlogSummarySchema,
+  BACKLOG_GROUP_BY,
   TASK_ERROR_CODES,
 } from './tasks.js';
 export type {
@@ -153,6 +158,11 @@ export type {
   ListTasksQuery,
   TaskInstanceResponse,
   UpdateInstanceRequest,
+  RedateRequest,
+  BacklogListQuery,
+  BacklogListResponse,
+  BacklogSummary,
+  BacklogGroupBy,
   TaskErrorCode,
 } from './tasks.js';
 

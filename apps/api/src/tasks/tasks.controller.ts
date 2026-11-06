@@ -14,9 +14,11 @@ import {
 import {
   createTaskRequestSchema,
   listTasksQuerySchema,
+  redateRequestSchema,
   updateTaskRequestSchema,
   type CreateTaskRequest,
   type ListTasksQuery,
+  type RedateRequest,
   type TaskResponse,
   type UpdateTaskRequest,
 } from '@focus-tracker/shared';
@@ -76,5 +78,14 @@ export class TasksController {
     @Param('id') id: string,
   ): Promise<void> {
     await this.tasks.remove(user.userId, id);
+  }
+
+  @Post(':id/redate')
+  redate(
+    @CurrentUser() user: JwtRequestContext,
+    @Param('id') id: string,
+    @Body(new ZodBodyPipe(redateRequestSchema)) body: RedateRequest,
+  ): Promise<TaskResponse> {
+    return this.tasks.redate(user.userId, id, body);
   }
 }

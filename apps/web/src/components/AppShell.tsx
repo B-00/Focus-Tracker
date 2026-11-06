@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useTimezoneAutoDetect } from '../hooks/useTimezoneAutoDetect';
 import { logout as apiLogout } from '../lib/auth-api';
+import { backlogQueryKeys, listBacklog } from '../lib/tasks-api';
 import { tokenStorage } from '../lib/token-storage';
 import { useAuthStore } from '../stores/auth-store';
 
@@ -37,6 +39,22 @@ function AppHeader() {
 
   const [signingOut, setSigningOut] = useState(false);
 
+  // Lightweight unfiltered-count query. Shares the cache key with the
+  // /backlog page so there's no duplicate request. Count comes from
+  // the `summary` field which doesn't change even when the user's
+  // priority filter narrows the `tasks` array — ideal for a nav badge.
+  const backlogQuery = useQuery({
+    queryKey: backlogQueryKeys.list(),
+    queryFn: () => listBacklog(),
+    staleTime: 30_000, // 30s — the backlog changes slowly
+  });
+  const backlogCount = backlogQuery.data
+    ? backlogQuery.data.summary.extreme +
+      backlogQuery.data.summary.high +
+      backlogQuery.data.summary.mid +
+      backlogQuery.data.summary.low
+    : 0;
+
   async function handleSignOut(): Promise<void> {
     setSigningOut(true);
     try {
@@ -70,6 +88,12 @@ function AppHeader() {
             active={location === '/tasks' || location.startsWith('/tasks')}
           />
           <NavLink
+            to="/backlog"
+            label="Backlog"
+            active={location === '/backlog' || location.startsWith('/backlog')}
+            badge={backlogCount > 0 ? backlogCount : undefined}
+          />
+          <NavLink
             to="/activity"
             label="Activity"
             active={location === '/activity' || location.startsWith('/activity')}
@@ -97,22 +121,32 @@ function AppHeader() {
 }
 
 interface NavLinkProps {
-  to: '/' | '/tasks' | '/activity' | '/settings';
+  to: '/' | '/tasks' | '/backlog' | '/activity' | '/settings';
   label: string;
   active: boolean;
+  /// Optional count pill next to the label. Hidden when undefined / 0.
+  badge?: number;
 }
 
-function NavLink({ to, label, active }: NavLinkProps) {
+function NavLink({ to, label, active, badge }: NavLinkProps) {
   return (
     <Link
       to={to}
-      className={`rounded-md px-2.5 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
         active
           ? 'bg-neutral-800 text-neutral-100'
           : 'text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200'
       }`}
     >
-      {label}
+      <span>{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span
+          className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1 text-[0.65rem] font-semibold text-amber-300"
+          aria-label={`${badge} in backlog`}
+        >
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }

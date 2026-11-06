@@ -9,8 +9,11 @@
 // tasks or sections invalidating with a stable key.
 
 import type {
+  BacklogGroupBy,
+  BacklogListResponse,
   CreateSectionRequest,
   CreateTaskRequest,
+  RedateRequest,
   SectionDeleteMode,
   SectionResponse,
   TaskInstanceResponse,
@@ -39,6 +42,18 @@ export const instancesQueryKeys = {
   all: ['instances'] as const,
   today: () => [...instancesQueryKeys.all, 'today'] as const,
 };
+
+export const backlogQueryKeys = {
+  all: ['backlog'] as const,
+  list: (filters?: BacklogListFilters) =>
+    [...backlogQueryKeys.all, 'list', filters ?? {}] as const,
+};
+
+export interface BacklogListFilters {
+  groupBy?: BacklogGroupBy;
+  /// CSV-encoded on the wire; arrays here for ergonomics.
+  priority?: Array<'extreme' | 'high' | 'mid' | 'low'>;
+}
 
 export interface TaskListFilters {
   kind?: 'dated' | 'ongoing' | 'routine';
@@ -164,4 +179,35 @@ export function toggleInstanceCompletion(
   return updateInstance(id, {
     completedAt: nextCompleted ? new Date().toISOString() : null,
   });
+}
+
+// ---------------------------------------------------------------------------
+//  Backlog + redate
+// ---------------------------------------------------------------------------
+
+export async function listBacklog(
+  filters?: BacklogListFilters,
+): Promise<BacklogListResponse> {
+  const params: Record<string, string> = {};
+  if (filters?.groupBy) params.groupBy = filters.groupBy;
+  if (filters?.priority && filters.priority.length > 0) {
+    params.priority = filters.priority.join(',');
+  }
+  const res = await api.get<BacklogListResponse>('/v1/backlog', { params });
+  return res.data;
+}
+
+/// Pulls a backlogged task back into the active Dated panel. `date` is
+/// either a `YYYY-MM-DD` string or the literal `"today"` (server-side
+/// tz-aware). Invalidates both the backlog and tasks queries so both
+/// surfaces repaint without a stale frame.
+export async function redateTask(
+  id: string,
+  body: RedateRequest,
+): Promise<TaskResponse> {
+  const res = await api.post<TaskResponse>(
+    `/v1/tasks/${encodeURIComponent(id)}/redate`,
+    body,
+  );
+  return res.data;
 }

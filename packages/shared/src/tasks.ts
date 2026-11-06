@@ -209,6 +209,10 @@ export const TASK_ERROR_CODES = [
   'kind_immutable',
   'transfer_requires_single_day',
   'section_delete_mode_required',
+  /// Redate was requested on a task that isn't backlogged / isn't a
+  /// single-day dated task / is archived. Separate from task_not_found
+  /// so the UI can differentiate "stale link" from "wrong state".
+  'redate_not_allowed',
 ] as const;
 export type TaskErrorCode = (typeof TASK_ERROR_CODES)[number];
 
@@ -239,3 +243,63 @@ export const updateInstanceRequestSchema = z
   })
   .refine((o) => Object.keys(o).length > 0, { message: 'empty update' });
 export type UpdateInstanceRequest = z.infer<typeof updateInstanceRequestSchema>;
+
+// ---------------------------------------------------------------------------
+//  Backlog + Redate (Tasks.md §3.5, §4.4, §5.6, §6)
+// ---------------------------------------------------------------------------
+
+/// POST /v1/tasks/:id/redate body. Accepts either a `YYYY-MM-DD` date
+/// or the literal string "today" — spec §6 convenience so the client
+/// doesn't have to recompute today in the user's local tz client-side.
+export const redateRequestSchema = z.object({
+  date: z.union([dateOnlySchema, z.literal('today')]),
+});
+export type RedateRequest = z.infer<typeof redateRequestSchema>;
+
+/// Backlog grouping (Tasks.md §4.1 / §4.4). `priority` is default; the
+/// panel header toggle flips to `section`.
+export const BACKLOG_GROUP_BY = ['priority', 'section'] as const;
+export type BacklogGroupBy = (typeof BACKLOG_GROUP_BY)[number];
+
+/// GET /v1/backlog query. `groupBy` is ignored by the server (grouping
+/// happens client-side) but passed through so the request-key reflects
+/// the current view intent — useful for React Query cache keys.
+/// `priority` is an optional CSV filter: `priority=extreme,high`.
+export const backlogListQuerySchema = z.object({
+  groupBy: z.enum(BACKLOG_GROUP_BY).optional(),
+  priority: z
+    .string()
+    .optional()
+    .transform((v) => {
+      if (!v) return undefined;
+      const parts = v
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      // Zod can't narrow a string to the TASK_PRIORITIES enum via
+      // transform, so we validate + narrow manually here.
+      const valid = parts.filter((p): p is (typeof TASK_PRIORITIES)[number] =>
+        (TASK_PRIORITIES as readonly string[]).includes(p),
+      );
+      return valid.length > 0 ? valid : undefined;
+    }),
+});
+export type BacklogListQuery = z.infer<typeof backlogListQuerySchema>;
+
+/// Per-priority headcount for the Backlog chip row (Tasks.md §4.1).
+/// Always returned regardless of the `priority` filter — the chip row
+/// shows the *unfiltered* distribution so the user can tell "is there
+/// more to filter back in".
+export const backlogSummarySchema = z.object({
+  extreme: z.number().int().nonnegative(),
+  high: z.number().int().nonnegative(),
+  mid: z.number().int().nonnegative(),
+  low: z.number().int().nonnegative(),
+});
+export type BacklogSummary = z.infer<typeof backlogSummarySchema>;
+
+export const backlogListResponseSchema = z.object({
+  tasks: z.array(taskResponseSchema),
+  summary: backlogSummarySchema,
+});
+export type BacklogListResponse = z.infer<typeof backlogListResponseSchema>;

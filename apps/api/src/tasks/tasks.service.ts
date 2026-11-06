@@ -5,12 +5,16 @@ import {
 } from '@nestjs/common';
 import type { Task as PrismaTask, Prisma } from '@prisma/client';
 import type {
+  BacklogListQuery,
+  BacklogListResponse,
   CreateTaskRequest,
   ListTasksQuery,
+  RedateRequest,
   TaskResponse,
   UpdateTaskRequest,
 } from '@focus-tracker/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { wallClockInTz } from '../activity/tz.util';
 
 /// Tasks CRUD. Supports all three kinds (dated / ongoing / routine).
 /// Routine completion lives on `TaskInstance` (see InstancesService),
@@ -286,6 +290,124 @@ export class TasksService {
   }
 
   // -------------------------------------------------------------------------
+  //  POST /v1/tasks/:id/redate — pull a task out of Backlog
+  // -------------------------------------------------------------------------
+
+  /// Pulls a backlogged task back into the active Dated panel on the
+  /// requested date (or "today" in the user's local tz). Clears
+  /// `transferredFromDate` so the one-transfer cycle restarts cleanly
+  /// (Tasks.md §5.6).
+  ///
+  /// Guard rail: only dated single-day tasks that are currently in the
+  /// backlog may be redated. Rejects with `redate_not_allowed` rather
+  /// than silently no-op'ing so UI stale-link cases surface loudly.
+  async redate(
+    userId: string,
+    id: string,
+    body: RedateRequest,
+  ): Promise<TaskResponse> {
+    const existing = await this.prisma.task.findFirst({
+      where: { id, userId },
+      select: {
+        id: true,
+        kind: true,
+        startDate: true,
+        endDate: true,
+        inBacklog: true,
+        archivedAt: true,
+      },
+    });
+    if (!existing) {
+      throw new NotFoundException({ error: 'task_not_found' });
+    }
+
+    const isSingleDayDated =
+      existing.kind === 'dated' &&
+      existing.startDate !== null &&
+      (existing.endDate === null ||
+        existing.endDate.getTime() === existing.startDate.getTime());
+    if (
+      !isSingleDayDated ||
+      !existing.inBacklog ||
+      existing.archivedAt !== null
+    ) {
+      throw new BadRequestException({
+        error: 'redate_not_allowed',
+        message:
+          'Redate only applies to single-day dated tasks currently in the backlog',
+      });
+    }
+
+    const targetDate =
+      body.date === 'today' ? await this.todayInUserTz(userId) : body.date;
+
+    const row = await this.prisma.task.update({
+      where: { id },
+      data: {
+        startDate: toDbDate(targetDate),
+        inBacklog: false,
+        transferredFromDate: null,
+      },
+    });
+    return toTaskResponse(row);
+  }
+
+  // -------------------------------------------------------------------------
+  //  GET /v1/backlog — tasks + summary
+  // -------------------------------------------------------------------------
+
+  async listBacklog(
+    userId: string,
+    query: BacklogListQuery,
+  ): Promise<BacklogListResponse> {
+    // Summary ignores the `priority` filter by design (Tasks.md §4.1 —
+    // the chip row shows the unfiltered distribution so the user can
+    // tell "what else is there to filter back in"). Compute it from a
+    // separate groupBy before applying the filter to the returned list.
+    const grouped = await this.prisma.task.groupBy({
+      by: ['priority'],
+      where: {
+        userId,
+        kind: 'dated',
+        inBacklog: true,
+        archivedAt: null,
+        completedAt: null,
+      },
+      _count: { _all: true },
+    });
+    const summary = { extreme: 0, high: 0, mid: 0, low: 0 };
+    for (const row of grouped) {
+      summary[row.priority] = row._count._all;
+    }
+
+    const where: Prisma.TaskWhereInput = {
+      userId,
+      kind: 'dated',
+      inBacklog: true,
+      archivedAt: null,
+      completedAt: null,
+      ...(query.priority && query.priority.length > 0
+        ? { priority: { in: query.priority } }
+        : {}),
+    };
+
+    const tasks = await this.prisma.task.findMany({
+      where,
+      // Default list sort: priority desc, then original-due date asc.
+      // The client can regroup by section; "original due" is either
+      // `transferredFromDate` (if the task went through a transfer)
+      // or the current `startDate` (if the task went to backlog without
+      // transferring — e.g. a non-transfer task missed by the nightly job).
+      orderBy: [{ priority: 'desc' }, { startDate: 'asc' }],
+    });
+
+    return {
+      tasks: tasks.map(toTaskResponse),
+      summary,
+    };
+  }
+
+  // -------------------------------------------------------------------------
   //  Private helpers
   // -------------------------------------------------------------------------
 
@@ -301,6 +423,26 @@ export class TasksService {
       throw new NotFoundException({ error: 'section_not_found' });
     }
   }
+
+  /// Today in the user's local timezone, as `YYYY-MM-DD`. Reuses the
+  /// Activity tz helper so we don't ship a second date-math path.
+  private async todayInUserTz(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const tz = user?.timezone ?? 'UTC';
+    const wc = wallClockInTz(new Date(), tz);
+    return `${pad4(wc.year)}-${pad2(wc.month)}-${pad2(wc.day)}`;
+  }
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function pad4(n: number): string {
+  return String(n).padStart(4, '0');
 }
 
 // ---------------------------------------------------------------------------
