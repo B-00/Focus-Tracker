@@ -94,6 +94,11 @@ function AppHeader() {
             badge={backlogCount > 0 ? backlogCount : undefined}
           />
           <NavLink
+            to="/focus"
+            label="Focus"
+            active={location === '/focus' || location.startsWith('/focus')}
+          />
+          <NavLink
             to="/activity"
             label="Activity"
             active={location === '/activity' || location.startsWith('/activity')}
@@ -121,7 +126,7 @@ function AppHeader() {
 }
 
 interface NavLinkProps {
-  to: '/' | '/tasks' | '/backlog' | '/activity' | '/settings';
+  to: '/' | '/tasks' | '/backlog' | '/focus' | '/activity' | '/settings';
   label: string;
   active: boolean;
   /// Optional count pill next to the label. Hidden when undefined / 0.

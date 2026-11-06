@@ -26,6 +26,7 @@ import {
 // (this store) per surface (only /dashboard).
 
 export const WIDGET_IDS = [
+  'focus_session',
   'today_tasks',
   'today_routines',
   'ongoing_tasks',
@@ -37,10 +38,12 @@ export const WIDGET_IDS = [
 export type WidgetId = (typeof WIDGET_IDS)[number];
 
 /// Default order matches the user's preferred "action-first" stack:
-/// today's actionable task lists at the top, consistency trends in
-/// the middle, activity signal at the bottom. Overridable per-user
-/// via moveWidgetUp/Down.
+/// focus session up top (if active it's the single most relevant thing on
+/// the dashboard; if not, Start is still a click away), then today's
+/// actionable task lists, consistency trends in the middle, activity
+/// signal at the bottom. Overridable per-user via moveWidgetUp/Down.
 export const DEFAULT_ORDER: readonly WidgetId[] = [
+  'focus_session',
   'today_tasks',
   'today_routines',
   'ongoing_tasks',

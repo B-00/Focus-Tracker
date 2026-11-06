@@ -10,6 +10,7 @@ import { isJwtValid } from './lib/jwt';
 import { tokenStorage } from './lib/token-storage';
 import { LoginPage } from './routes/Login';
 import { DashboardPage } from './routes/Dashboard';
+import { FocusPage } from './routes/Focus';
 import { SettingsPage } from './routes/Settings';
 import { ActivityPage } from './routes/Activity';
 import { TasksPage } from './routes/Tasks';
@@ -103,12 +104,19 @@ const backlogRoute = createRoute({
   component: BacklogPage,
 });
 
+const focusRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/focus',
+  component: FocusPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   protectedLayout.addChildren([
     dashboardRoute,
     tasksRoute,
     backlogRoute,
+    focusRoute,
     activityRoute,
     settingsRoute,
   ]),

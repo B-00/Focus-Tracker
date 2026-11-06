@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import { BacklogIndicatorWidget } from './dashboard/BacklogIndicatorWidget';
 import { DatedChartWidget } from './dashboard/DatedChartWidget';
+import { FocusSessionWidget } from './dashboard/FocusSessionWidget';
 import { OngoingTasksWidget } from './dashboard/OngoingTasksWidget';
 import { RoutineChartWidget } from './dashboard/RoutineChartWidget';
 import { TodayActivityWidget } from './dashboard/TodayActivityWidget';
@@ -26,6 +27,7 @@ import {
 // users), (3) map the ID to the component in WIDGET_MAP below.
 
 const WIDGET_MAP: Record<WidgetId, ComponentType> = {
+  focus_session: FocusSessionWidget,
   today_tasks: TodayTasksWidget,
   today_routines: TodayRoutinesWidget,
   ongoing_tasks: OngoingTasksWidget,
@@ -76,6 +78,7 @@ export function DashboardPage() {
 // position-by-position scan is less code than a Set diff.
 function isDefaultOrder(order: readonly WidgetId[]): boolean {
   const defaultIds: WidgetId[] = [
+    'focus_session',
     'today_tasks',
     'today_routines',
     'ongoing_tasks',
