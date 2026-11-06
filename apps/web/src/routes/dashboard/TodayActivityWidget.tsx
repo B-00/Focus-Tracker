@@ -127,11 +127,11 @@ function MiniBar({
                 style={{ height: `${heightFrac * 100}%` }}
               >
                 <div
-                  className="bg-emerald-500/70"
+                  className="bg-sky-500/70"
                   style={{ height: `${(1 - sitesShare) * 100}%` }}
                 />
                 <div
-                  className="bg-sky-500/70"
+                  className="bg-yellow-400/70"
                   style={{ height: `${sitesShare * 100}%` }}
                 />
               </div>
