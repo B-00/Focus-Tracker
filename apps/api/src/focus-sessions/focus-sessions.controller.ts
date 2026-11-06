@@ -12,6 +12,7 @@ import {
 import {
   focusSessionListQuerySchema,
   startFocusSessionRequestSchema,
+  type FocusSessionBreakdownResponse,
   type FocusSessionCurrentResponse,
   type FocusSessionListQuery,
   type FocusSessionListResponse,
@@ -65,6 +66,14 @@ export class FocusSessionsController {
     @Param('id') id: string,
   ): Promise<FocusSessionResponse> {
     return this.sessions.getById(user.userId, id);
+  }
+
+  @Get(':id/breakdown')
+  getBreakdown(
+    @CurrentUser() user: JwtRequestContext,
+    @Param('id') id: string,
+  ): Promise<FocusSessionBreakdownResponse> {
+    return this.sessions.getBreakdown(user.userId, id);
   }
 
   @Post()

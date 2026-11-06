@@ -88,11 +88,28 @@ export type FocusSessionListResponse = z.infer<
   typeof focusSessionListResponseSchema
 >;
 
+/// "Current target" summary — most recent focus_change telemetry event
+/// attributed to the live session. Null when the session has no attributed
+/// events yet (newly started session, or paused + no backfill).
+///
+/// Only populated by `/v1/focus-sessions/current` — the other read paths
+/// don't need it (summary shows top-5 breakdown instead).
+export const focusSessionLatestTargetSchema = z.object({
+  name: z.string(),                       // appName (desktop) or domain (browser)
+  source: z.enum(['desktop', 'browser']),
+  startedAt: z.string(),                  // event startedAt — lets the UI dim if stale
+});
+export type FocusSessionLatestTarget = z.infer<
+  typeof focusSessionLatestTargetSchema
+>;
+
 /// `GET /current` returns `null` when nothing's active (not a 404 — this is
 /// the dashboard-widget hot path and nulls are cheaper than a thrown error
 /// per 5s poll).
 export const focusSessionCurrentResponseSchema = z.object({
   session: focusSessionResponseSchema.nullable(),
+  /// Only present when `session` is non-null. See §8.1 "current target".
+  latestTarget: focusSessionLatestTargetSchema.nullable().optional(),
 });
 export type FocusSessionCurrentResponse = z.infer<
   typeof focusSessionCurrentResponseSchema
@@ -168,6 +185,36 @@ export const focusSessionListQuerySchema = z
     { message: 'from must be <= to', path: ['from'] },
   );
 export type FocusSessionListQuery = z.infer<typeof focusSessionListQuerySchema>;
+
+// ---------------------------------------------------------------------------
+//  Post-session breakdown (FocusSession.md §8.4, §10)
+// ---------------------------------------------------------------------------
+
+/// One row in the top-apps or top-sites list. `name` is the display-ready
+/// target string (appName for desktop, domain for browser — same as
+/// ActivityMinuteRollup.target). `durationMs` is the sum of attributed
+/// event durations for this target within the session.
+export const focusSessionBreakdownRowSchema = z.object({
+  name: z.string(),
+  durationMs: z.number().int().nonnegative(),
+});
+export type FocusSessionBreakdownRow = z.infer<
+  typeof focusSessionBreakdownRowSchema
+>;
+
+/// GET /v1/focus-sessions/:id/breakdown — per-source top-N target lists,
+/// plus the total attributed ms per source so the UI can render an "Other"
+/// segment or percentages without re-querying.
+export const focusSessionBreakdownResponseSchema = z.object({
+  sessionId: z.string(),
+  totalAppsMs: z.number().int().nonnegative(),
+  totalSitesMs: z.number().int().nonnegative(),
+  topApps: z.array(focusSessionBreakdownRowSchema),
+  topSites: z.array(focusSessionBreakdownRowSchema),
+});
+export type FocusSessionBreakdownResponse = z.infer<
+  typeof focusSessionBreakdownResponseSchema
+>;
 
 // ---------------------------------------------------------------------------
 //  Pure helpers — duration math (FocusSession.md §5)

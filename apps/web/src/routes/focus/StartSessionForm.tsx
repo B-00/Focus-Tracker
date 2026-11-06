@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { StartFocusSessionRequest } from '@focus-tracker/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { StartFocusSessionRequest, TaskResponse } from '@focus-tracker/shared';
 import {
   focusSessionsQueryKeys,
   SessionAlreadyActiveError,
@@ -9,16 +9,20 @@ import {
 } from '../../lib/focus-sessions-api';
 import { Modal } from '../../components/Modal';
 import { formatDuration } from '../../lib/format-duration';
+import { listTasks, tasksQueryKeys } from '../../lib/tasks-api';
 
 // Shared "Start Session" form used by the dashboard widget AND the /focus
 // route (FocusSession.md §8.1 / §8.2). Owns:
 //   - Mode toggle (timer / open)
 //   - Duration presets (25m / 50m / 90m / custom) — only visible in timer mode
+//   - Optional task picker (dropdown of incomplete tasks)
 //   - POST /v1/focus-sessions with the §9.1 concurrent-session confirm modal
 //
-// ponytail: task picker (§8.1 bullet 5) deferred to slice 3. The server
-// already accepts `taskId`; adding the dropdown + search is UI-only and
-// lands cleaner once the breakdown summary needs task context anyway.
+// ponytail: plain <select> for the task picker instead of a searchable
+// combobox (§8.1 mentions "searchable"). A single user's incomplete-tasks
+// list fits in a native dropdown; search becomes relevant in the ~100+
+// range. Upgrade path: swap the <select> for a Downshift / cmdk combobox
+// in-place — the state shape is already `string | null`.
 
 const PRESETS_MS = [25 * 60_000, 50 * 60_000, 90 * 60_000] as const;
 type PresetMs = (typeof PRESETS_MS)[number];
@@ -35,8 +39,24 @@ export function StartSessionForm({
   const [presetMs, setPresetMs] = useState<PresetMs>(PRESETS_MS[0]);
   const [customMin, setCustomMin] = useState<string>('');
   const [useCustom, setUseCustom] = useState(false);
+  const [taskId, setTaskId] = useState<string | null>(null);
   const [conflict, setConflict] = useState<SessionAlreadyActiveError | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Incomplete tasks (completedAt=null, archivedAt=null) across all kinds.
+  // staleTime 30s — the picker is cosmetic optional metadata, so the user
+  // starting a session before a brand-new task appears in the dropdown is
+  // acceptable; next mount will catch up.
+  const tasksQuery = useQuery({
+    queryKey: tasksQueryKeys.list(),
+    queryFn: () => listTasks(),
+    staleTime: 30_000,
+  });
+  const incompleteTasks = (tasksQuery.data ?? [])
+    .filter((t): t is TaskResponse =>
+      t.completedAt === null && t.archivedAt === null,
+    )
+    .sort((a, b) => a.title.localeCompare(b.title));
 
   const start = useMutation({
     mutationFn: (body: StartFocusSessionRequest) => startSession(body),
@@ -86,13 +106,14 @@ export function StartSessionForm({
   }
 
   function buildBody(): StartFocusSessionRequest | null {
-    if (mode === 'open') return { mode: 'open' };
+    const taskLink = taskId ? { taskId } : {};
+    if (mode === 'open') return { mode: 'open', ...taskLink };
     const ms = resolveDurationMs();
     if (ms == null) {
       setErrorMsg('Enter a duration in minutes.');
       return null;
     }
-    return { mode: 'timer', plannedDurationMs: ms };
+    return { mode: 'timer', plannedDurationMs: ms, ...taskLink };
   }
 
   function handleStart() {
@@ -163,6 +184,27 @@ export function StartSessionForm({
               aria-label="Custom duration in minutes"
             />
           </label>
+        </div>
+      )}
+
+      {incompleteTasks.length > 0 && (
+        <div className="mb-3 flex items-center gap-2 text-xs">
+          <label htmlFor="focus-session-task" className="text-neutral-400">
+            Task
+          </label>
+          <select
+            id="focus-session-task"
+            value={taskId ?? ''}
+            onChange={(e) => setTaskId(e.target.value || null)}
+            className="flex-1 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-neutral-200 outline-none focus:border-emerald-500/60"
+          >
+            <option value="">— no task —</option>
+            {incompleteTasks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 

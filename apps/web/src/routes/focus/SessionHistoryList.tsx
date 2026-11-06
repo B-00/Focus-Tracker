@@ -9,13 +9,19 @@ import { formatDuration } from '../../lib/format-duration';
 // Session history — FocusSession.md §8.2, bottom section. Reverse-chron
 // list, compact rows: date · effective · pauses · end-reason badge.
 //
-// ponytail: inline expand / detail drawer (§8.2 "click to expand the
-// post-session summary") is deferred to slice 3 where the /breakdown
-// endpoint lands. For slice 2 the list is read-only.
+// Rows are clickable when `onOpen` is provided — opens the post-session
+// summary modal (§8.4) for that session. Active (running/paused) rows
+// are not openable since the summary is a completed-session view.
 
 const PAGE_LIMIT = 100;
 
-export function SessionHistoryList() {
+export function SessionHistoryList({
+  onOpen,
+}: {
+  /// Optional — if omitted, rows render as non-interactive <li>s.
+  /// Passed from /focus so the parent owns the modal state.
+  onOpen?: (sessionId: string) => void;
+}) {
   const query = { limit: PAGE_LIMIT } as const;
   const { data, isLoading, isError } = useQuery({
     queryKey: focusSessionsQueryKeys.list(query),
@@ -40,13 +46,19 @@ export function SessionHistoryList() {
   return (
     <ul className="divide-y divide-neutral-800 rounded-lg border border-neutral-800 bg-neutral-900">
       {sessions.map((s) => (
-        <SessionRow key={s.id} session={s} />
+        <SessionRow key={s.id} session={s} onOpen={onOpen} />
       ))}
     </ul>
   );
 }
 
-function SessionRow({ session }: { session: FocusSessionListItem }) {
+function SessionRow({
+  session,
+  onOpen,
+}: {
+  session: FocusSessionListItem;
+  onOpen?: (sessionId: string) => void;
+}) {
   const started = new Date(session.startedAt);
   const dateLabel = started.toLocaleDateString(undefined, {
     month: 'short',
@@ -59,9 +71,11 @@ function SessionRow({ session }: { session: FocusSessionListItem }) {
       ? formatDuration(session.effectiveDurationMs)
       : '—';
   const endReason = session.endReason ?? session.state;
+  const isActive = session.state === 'running' || session.state === 'paused';
+  const clickable = onOpen !== undefined && !isActive;
 
-  return (
-    <li className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+  const body = (
+    <div className="flex w-full items-center justify-between gap-3 text-sm">
       <div className="flex min-w-0 items-baseline gap-3">
         <span className="tabular-nums text-neutral-200">{dateLabel}</span>
         <span className="text-xs uppercase tracking-wider text-neutral-500">
@@ -77,8 +91,24 @@ function SessionRow({ session }: { session: FocusSessionListItem }) {
         )}
         <EndReasonBadge reason={endReason} />
       </div>
-    </li>
+    </div>
   );
+
+  if (clickable) {
+    return (
+      <li>
+        <button
+          type="button"
+          onClick={() => onOpen(session.id)}
+          className="w-full px-4 py-2.5 text-left transition-colors hover:bg-neutral-800/60 focus:outline-none focus-visible:bg-neutral-800/80"
+          aria-label={`View summary for ${session.mode} session on ${dateLabel}`}
+        >
+          {body}
+        </button>
+      </li>
+    );
+  }
+  return <li className="px-4 py-2.5">{body}</li>;
 }
 
 function EndReasonBadge({ reason }: { reason: string }) {

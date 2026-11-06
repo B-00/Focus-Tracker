@@ -230,6 +230,14 @@ export type {
   StartFocusSessionRequest,
   SessionAlreadyActiveResponse,
   FocusSessionListQuery,
+  FocusSessionBreakdownRow,
+  FocusSessionBreakdownResponse,
+  FocusSessionLatestTarget,
+} from './focus-sessions.js';
+export {
+  focusSessionBreakdownRowSchema,
+  focusSessionBreakdownResponseSchema,
+  focusSessionLatestTargetSchema,
 } from './focus-sessions.js';
 
 // ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   effectiveMs,
   sumPauseMs,
+  type FocusSessionLatestTarget,
   type FocusSessionResponse,
 } from '@focus-tracker/shared';
 import { useNowMs } from '../../hooks/useCurrentSession';
@@ -29,9 +30,14 @@ import { formatDuration } from '../../lib/format-duration';
 
 export function ActiveSessionPanel({
   session,
+  latestTarget = null,
   compact = false,
 }: {
   session: FocusSessionResponse;
+  /// Most recent attributed telemetry event's target — populated by the
+  /// /current poll (§8.1). Null while there's been no attributed activity
+  /// yet, or when the field is unavailable.
+  latestTarget?: FocusSessionLatestTarget | null;
   /// Dense single-row variant for the (future) sticky bar. Hides the big
   /// readout and renders inline. Slice 2 doesn't use this but it keeps
   /// slice 3 cheap.
@@ -131,6 +137,16 @@ export function ActiveSessionPanel({
             style={{ width: `${progressPct}%` }}
           />
         </div>
+      )}
+
+      {latestTarget && !compact && (
+        <p className="mb-3 truncate text-xs text-neutral-400" aria-live="polite">
+          <span className="text-neutral-500">now · </span>
+          <span className="text-neutral-200">{latestTarget.name}</span>
+          <span className="ml-1.5 text-[0.65rem] uppercase tracking-wider text-neutral-500">
+            {latestTarget.source}
+          </span>
+        </p>
       )}
 
       <div className="flex items-center gap-2">

@@ -1,6 +1,11 @@
-import { useCurrentSession } from '../hooks/useCurrentSession';
+import { useState } from 'react';
+import {
+  useCurrentSession,
+  useSessionEnded,
+} from '../hooks/useCurrentSession';
 import { ActiveSessionPanel } from './focus/ActiveSessionPanel';
 import { SessionHistoryList } from './focus/SessionHistoryList';
+import { SessionSummaryModal } from './focus/SessionSummaryModal';
 import { StartSessionForm } from './focus/StartSessionForm';
 
 // /focus route — FocusSession.md §8.2.
@@ -11,6 +16,11 @@ import { StartSessionForm } from './focus/StartSessionForm';
 export function FocusPage() {
   const { data, isLoading, isError } = useCurrentSession();
   const session = data?.session ?? null;
+
+  // One summary modal serves both the end-of-session auto-open AND the
+  // history-row click path. Whichever path sets `summaryId` wins.
+  const [summaryId, setSummaryId] = useState<string | null>(null);
+  useSessionEnded((id) => setSummaryId(id));
 
   return (
     <main className="mx-auto flex min-h-full max-w-2xl flex-col gap-6 px-6 py-8">
@@ -31,14 +41,24 @@ export function FocusPage() {
           Failed to load current session.
         </section>
       )}
-      {!isLoading && !isError && (session ? <ActiveSessionPanel session={session} /> : <StartSessionForm />)}
+      {!isLoading && !isError && (
+        session
+          ? <ActiveSessionPanel session={session} latestTarget={data?.latestTarget ?? null} />
+          : <StartSessionForm />
+      )}
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-neutral-400">
           History
         </h2>
-        <SessionHistoryList />
+        <SessionHistoryList onOpen={setSummaryId} />
       </section>
+
+      <SessionSummaryModal
+        sessionId={summaryId}
+        open={summaryId !== null}
+        onClose={() => setSummaryId(null)}
+      />
     </main>
   );
 }

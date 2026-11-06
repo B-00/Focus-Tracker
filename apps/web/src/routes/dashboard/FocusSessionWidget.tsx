@@ -1,6 +1,11 @@
+import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { useCurrentSession } from '../../hooks/useCurrentSession';
+import {
+  useCurrentSession,
+  useSessionEnded,
+} from '../../hooks/useCurrentSession';
 import { ActiveSessionPanel } from '../focus/ActiveSessionPanel';
+import { SessionSummaryModal } from '../focus/SessionSummaryModal';
 import { StartSessionForm } from '../focus/StartSessionForm';
 import { WidgetReorderControls } from './WidgetReorderControls';
 
@@ -16,6 +21,11 @@ import { WidgetReorderControls } from './WidgetReorderControls';
 export function FocusSessionWidget() {
   const { data, isLoading, isError } = useCurrentSession();
   const session = data?.session ?? null;
+
+  // Pop the post-session summary the moment the current session transitions
+  // to completed (user-initiated Stop or scheduler timer_complete). §8.4.
+  const [summaryId, setSummaryId] = useState<string | null>(null);
+  useSessionEnded((id) => setSummaryId(id));
 
   return (
     <section>
@@ -44,7 +54,17 @@ export function FocusSessionWidget() {
           Failed to load session.
         </div>
       )}
-      {!isLoading && !isError && (session ? <ActiveSessionPanel session={session} /> : <StartSessionForm />)}
+      {!isLoading && !isError && (
+        session
+          ? <ActiveSessionPanel session={session} latestTarget={data?.latestTarget ?? null} />
+          : <StartSessionForm />
+      )}
+
+      <SessionSummaryModal
+        sessionId={summaryId}
+        open={summaryId !== null}
+        onClose={() => setSummaryId(null)}
+      />
     </section>
   );
 }

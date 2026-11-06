@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   fetchCurrentSession,
   focusSessionsQueryKeys,
@@ -79,4 +79,38 @@ function getNowSnapshot(): number {
 /// clock ms. Zero dependency between callers; one shared interval.
 export function useNowMs(): number {
   return useSyncExternalStore(subscribeNow, getNowSnapshot, getNowSnapshot);
+}
+
+// ---------------------------------------------------------------------------
+//  "Session just ended" latch — for auto-opening the post-session summary
+// ---------------------------------------------------------------------------
+
+/// Watches the current-session poll for a non-null → null transition and
+/// fires `onEnded(endedSessionId)` once per transition. Used by the dashboard
+/// widget and /focus page to pop the SessionSummaryModal (§8.4) the moment
+/// the session completes — whether that completion was the user hitting
+/// Stop or the scheduler firing timer_complete.
+///
+/// ponytail: component-local latch instead of a global pub/sub. Two mount
+/// points (widget + /focus page) both call this, but the summary should
+/// only open on the surface the user is currently on — not both. Keeping
+/// the latch per-component lets each surface decide independently, and
+/// React batching makes "both open the modal" impossible since the hook
+/// mounts in only one of them at a time (the widget is only on /, the
+/// page is only on /focus).
+export function useSessionEnded(onEnded: (endedSessionId: string) => void): void {
+  const prevIdRef = useRef<string | null>(null);
+  const callbackRef = useRef(onEnded);
+  callbackRef.current = onEnded;
+
+  const { data } = useCurrentSession();
+  const currentId = data?.session?.id ?? null;
+
+  useEffect(() => {
+    const prev = prevIdRef.current;
+    if (prev !== null && currentId === null) {
+      callbackRef.current(prev);
+    }
+    prevIdRef.current = currentId;
+  }, [currentId]);
 }

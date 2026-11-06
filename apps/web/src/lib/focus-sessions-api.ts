@@ -6,10 +6,12 @@
 // mounted (dashboard widget + sticky bar + /focus).
 
 import {
+  focusSessionBreakdownResponseSchema,
   focusSessionCurrentResponseSchema,
   focusSessionListResponseSchema,
   focusSessionResponseSchema,
   sessionAlreadyActiveResponseSchema,
+  type FocusSessionBreakdownResponse,
   type FocusSessionCurrentResponse,
   type FocusSessionListQuery,
   type FocusSessionListResponse,
@@ -30,6 +32,8 @@ export const focusSessionsQueryKeys = {
   list: (query?: FocusSessionListQuery) =>
     [...focusSessionsQueryKeys.all, 'list', query ?? {}] as const,
   detail: (id: string) => [...focusSessionsQueryKeys.all, 'detail', id] as const,
+  breakdown: (id: string) =>
+    [...focusSessionsQueryKeys.all, 'breakdown', id] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -97,4 +101,11 @@ export async function listSessions(
 export async function fetchSession(id: string): Promise<FocusSessionResponse> {
   const { data } = await api.get(`/v1/focus-sessions/${id}`);
   return focusSessionResponseSchema.parse(data);
+}
+
+export async function fetchSessionBreakdown(
+  id: string,
+): Promise<FocusSessionBreakdownResponse> {
+  const { data } = await api.get(`/v1/focus-sessions/${id}/breakdown`);
+  return focusSessionBreakdownResponseSchema.parse(data);
 }

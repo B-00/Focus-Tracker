@@ -9,7 +9,10 @@ import { Prisma, type FocusSession, type FocusSessionPause } from '@prisma/clien
 import {
   effectiveMs,
   sumPauseMs,
+  type FocusSessionBreakdownResponse,
+  type FocusSessionBreakdownRow,
   type FocusSessionCurrentResponse,
+  type FocusSessionLatestTarget,
   type FocusSessionListItem,
   type FocusSessionListQuery,
   type FocusSessionListResponse,
@@ -57,7 +60,38 @@ export class FocusSessionsService {
       orderBy: { startedAt: 'desc' },
       include: { pauses: { orderBy: { pausedAt: 'asc' } } },
     });
-    return { session: session ? this.toResponse(session) : null };
+    if (!session) return { session: null };
+
+    // "Current target" bullet (§8.1) — most recent attributed focus_change.
+    // Reuses the (userId, focusSessionId) index; `kind` filter is in-index
+    // narrow enough that the per-tick cost is a lookup, not a scan.
+    const latestEvent = await this.prisma.telemetryEvent.findFirst({
+      where: {
+        userId,
+        focusSessionId: session.id,
+        kind: 'focus_change',
+      },
+      orderBy: { startedAt: 'desc' },
+      select: { source: true, target: true, startedAt: true },
+    });
+
+    let latestTarget: FocusSessionLatestTarget | null = null;
+    if (latestEvent) {
+      const target = latestEvent.target as Record<string, unknown> | null;
+      const name =
+        latestEvent.source === 'desktop'
+          ? typeof target?.appName === 'string' ? target.appName : null
+          : typeof target?.domain === 'string' ? target.domain : null;
+      if (name && name.length > 0) {
+        latestTarget = {
+          name,
+          source: latestEvent.source as 'desktop' | 'browser',
+          startedAt: latestEvent.startedAt.toISOString(),
+        };
+      }
+    }
+
+    return { session: this.toResponse(session), latestTarget };
   }
 
   async getById(userId: string, id: string): Promise<FocusSessionResponse> {
@@ -67,6 +101,92 @@ export class FocusSessionsService {
     });
     if (!row) throw new NotFoundException({ error: 'session_not_found' });
     return this.toResponse(row);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  Breakdown (FocusSession.md §8.4 / §10 `/:id/breakdown`)
+  // ---------------------------------------------------------------------------
+  //
+  // Reads the raw TelemetryEvent rows attributed to this session (the
+  // `(userId, focusSessionId)` index already exists on TelemetryEvent so
+  // this is cheap even for a busy session). Aggregates in memory by
+  // display-ready target: `target.appName` for desktop, `target.domain`
+  // for browser — same derivation used by the Activity rollup pipeline
+  // (telemetry.service.ts `deriveRollupTarget`). Inlined here rather than
+  // extracted — 8 lines of switch-on-source, only two callers so far, and
+  // Activity's version runs inside a hot ingest loop where I don't want
+  // an indirection anyway.
+  //
+  // ponytail: iterating the attributed events once in Node is fine up to
+  // ~hundreds of thousands of rows (JSON parse + Map insert per row). If
+  // a single session ever exceeds that (24h of heavy multi-device use),
+  // upgrade path is Prisma raw SQL with `jsonb_extract_path_text(target,
+  // 'appName')` and a GROUP BY — keeps the pipeline server-side.
+  async getBreakdown(
+    userId: string,
+    id: string,
+  ): Promise<FocusSessionBreakdownResponse> {
+    // Scope check + 404 — reuse getById so cross-user leaks and
+    // not-found behavior are shared.
+    await this.getById(userId, id);
+
+    const events = await this.prisma.telemetryEvent.findMany({
+      where: {
+        userId,
+        focusSessionId: id,
+        kind: 'focus_change',
+      },
+      select: {
+        source: true,
+        target: true,
+        durationMs: true,
+        startedAt: true,
+        endedAt: true,
+      },
+    });
+
+    const appsAgg = new Map<string, number>();
+    const sitesAgg = new Map<string, number>();
+    let totalAppsMs = 0;
+    let totalSitesMs = 0;
+
+    for (const e of events) {
+      const target = e.target as Record<string, unknown> | null;
+      if (!target) continue;
+      const name =
+        e.source === 'desktop'
+          ? typeof target.appName === 'string' && target.appName.length > 0
+            ? target.appName
+            : null
+          : typeof target.domain === 'string' && target.domain.length > 0
+            ? target.domain
+            : null;
+      if (!name) continue;
+
+      const durationMs =
+        typeof e.durationMs === 'number' && e.durationMs >= 0
+          ? e.durationMs
+          : e.endedAt
+            ? Math.max(0, e.endedAt.getTime() - e.startedAt.getTime())
+            : 0;
+      if (durationMs === 0) continue;
+
+      if (e.source === 'desktop') {
+        appsAgg.set(name, (appsAgg.get(name) ?? 0) + durationMs);
+        totalAppsMs += durationMs;
+      } else {
+        sitesAgg.set(name, (sitesAgg.get(name) ?? 0) + durationMs);
+        totalSitesMs += durationMs;
+      }
+    }
+
+    return {
+      sessionId: id,
+      totalAppsMs,
+      totalSitesMs,
+      topApps: topN(appsAgg, 5),
+      topSites: topN(sitesAgg, 5),
+    };
   }
 
   async list(
@@ -493,4 +613,13 @@ function parseWhen(input: string, tz: string, edge: 'start' | 'end'): Date {
     return new Date(naiveUtcMs - offsetMs);
   }
   return new Date(input);
+}
+
+/// Top-N by durationMs desc. Shared between the service's apps and sites
+/// aggregates — single tiny helper rather than inlining the sort twice.
+function topN(agg: Map<string, number>, limit: number): FocusSessionBreakdownRow[] {
+  return [...agg.entries()]
+    .map(([name, durationMs]) => ({ name, durationMs }))
+    .sort((a, b) => b.durationMs - a.durationMs)
+    .slice(0, limit);
 }

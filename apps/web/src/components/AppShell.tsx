@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useTimezoneAutoDetect } from '../hooks/useTimezoneAutoDetect';
 import { logout as apiLogout } from '../lib/auth-api';
+import { StickySessionBar } from '../routes/focus/StickySessionBar';
 import { backlogQueryKeys, listBacklog } from '../lib/tasks-api';
 import { tokenStorage } from '../lib/token-storage';
 import { useAuthStore } from '../stores/auth-store';
@@ -23,10 +24,12 @@ export function AppShell(): ReactNode {
   // authenticated session. See Settings.md §4.1.1 and useTimezoneAutoDetect
   // for the policy (no-op once `timezoneOverridden = true`).
   useTimezoneAutoDetect();
+  const currentPath = useRouterState({ select: (s) => s.location.pathname });
   return (
     <div className="min-h-screen text-neutral-100">
       <AppHeader />
-      {/* TODO(FocusSession §8.3): cross-route sticky session bar mounts here */}
+      {/* FocusSession.md §8.3 — self-suppresses on /focus and /login. */}
+      <StickySessionBar currentPath={currentPath} />
       <Outlet />
     </div>
   );
