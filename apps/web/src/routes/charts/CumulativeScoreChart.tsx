@@ -123,9 +123,19 @@ function shortDate(ymd: string): string {
   return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function ChartTooltip({ active, payload }: TooltipProps<number, string>) {
+function ChartTooltip(props: TooltipProps<number, string>) {
+  // Recharts 3.x narrowed the exported `TooltipProps` type to drop
+  // `payload` from the public surface (it's still passed at runtime).
+  // Cast to the shape we actually consume instead of pulling in another
+  // dependency just for a type. ponytail: upgrade path is a dedicated
+  // `type RechartsTooltipPayload = { active?: boolean; payload?: ... }`
+  // in a `recharts.d.ts` shim once a second chart needs the same shape.
+  const { active, payload } = props as unknown as {
+    active?: boolean;
+    payload?: Array<{ payload?: ChartPoint }>;
+  };
   if (!active || !payload || payload.length === 0) return null;
-  const row = payload[0]?.payload as ChartPoint | undefined;
+  const row = payload[0]?.payload;
   if (!row) return null;
 
   const isDated = row.backlogCount !== undefined;
