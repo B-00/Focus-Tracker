@@ -1,40 +1,81 @@
+import type { ComponentType } from 'react';
 import { BacklogIndicatorWidget } from './dashboard/BacklogIndicatorWidget';
 import { OngoingTasksWidget } from './dashboard/OngoingTasksWidget';
 import { TodayActivityWidget } from './dashboard/TodayActivityWidget';
+import { TodayRoutinesWidget } from './dashboard/TodayRoutinesWidget';
 import { TodayTasksWidget } from './dashboard/TodayTasksWidget';
+import {
+  resetWidgetOrder,
+  useWidgetOrder,
+  type WidgetId,
+} from './dashboard/widget-order';
 
-// Dashboard = composition surface (Dashboard.md §3). The dashboard owns
-// zero feature behaviour; it just renders widgets from feature specs in
-// a vertical stack.
+// Dashboard = composition surface (Dashboard.md §3). Owns zero feature
+// behavior; it just renders widgets in whatever order the user has set.
 //
-// Current v1 stack (default order roughly matches Dashboard.md §4.2 —
-// action-first at top, trend signals below, conditional backlog where
-// it can't grab attention when empty):
+// Each widget carries its own ▲/▼ reorder arrows in its header
+// (WidgetReorderControls). The order lives in a shared store
+// (widget-order.ts) so arrow clicks + localStorage persistence + the
+// Dashboard's own render loop all read the same source.
 //
-//   1. Today's tasks       — dated + routine instances scheduled today
-//   2. Today's activity    — hourly silhouette + top apps/sites
-//   3. Ongoing tasks       — incomplete, priority-sorted
-//   4. Backlog indicator   — conditional, hidden when backlog is empty
-//
-// Widget reorder/hide/collapse prefs (Dashboard.md §5-6), the focus
-// session card, consistency charts, and Memento Mori land in later
-// slices. Each widget is self-contained — adding/removing one is a
-// single-line change here.
+// Adding a new widget is three steps: (1) implement the widget, (2) add
+// its ID to WIDGET_IDS in widget-order.ts (auto-appends for existing
+// users), (3) map the ID to the component in WIDGET_MAP below.
+
+const WIDGET_MAP: Record<WidgetId, ComponentType> = {
+  today_tasks: TodayTasksWidget,
+  today_routines: TodayRoutinesWidget,
+  ongoing_tasks: OngoingTasksWidget,
+  backlog: BacklogIndicatorWidget,
+  today_activity: TodayActivityWidget,
+};
 
 export function DashboardPage() {
+  const order = useWidgetOrder();
+  const isCustomized = !isDefaultOrder(order);
+
   return (
     <main className="mx-auto flex min-h-full max-w-2xl flex-col gap-4 px-6 py-8">
-      <header>
-        <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          The widgets you see here are customisable in Settings (coming soon).
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-sm text-neutral-400">
+            Reorder widgets with the ▲▼ arrows in each header.
+          </p>
+        </div>
+        {isCustomized && (
+          <button
+            type="button"
+            onClick={resetWidgetOrder}
+            className="mt-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+            title="Restore default widget order"
+          >
+            Reset order
+          </button>
+        )}
       </header>
 
-      <TodayTasksWidget />
-      <TodayActivityWidget />
-      <OngoingTasksWidget />
-      <BacklogIndicatorWidget />
+      {order.map((id) => {
+        const W = WIDGET_MAP[id];
+        return <W key={id} />;
+      })}
     </main>
   );
+}
+
+// Cheap identity check: the default order is short enough that a
+// position-by-position scan is less code than a Set diff.
+function isDefaultOrder(order: readonly WidgetId[]): boolean {
+  const defaultIds: WidgetId[] = [
+    'today_tasks',
+    'today_routines',
+    'ongoing_tasks',
+    'backlog',
+    'today_activity',
+  ];
+  if (order.length !== defaultIds.length) return false;
+  for (let i = 0; i < order.length; i++) {
+    if (order[i] !== defaultIds[i]) return false;
+  }
+  return true;
 }

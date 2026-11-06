@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import type { TaskPriority } from '@focus-tracker/shared';
 import { backlogQueryKeys, listBacklog } from '../../lib/tasks-api';
 import { usePriorityColors } from '../tasks/priority-colors';
+import { WidgetReorderControls } from './WidgetReorderControls';
 
 // Dashboard widget — "Backlog indicator" (Tasks.md §4.2 item 3 /
 // Dashboard.md §3 `backlog`). Conditional render: hidden entirely when
@@ -37,72 +38,81 @@ export function BacklogIndicatorWidget() {
   if (total === 0) return null;
 
   return (
-    <Link
-      to="/backlog"
-      className="group block rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 transition-colors hover:border-amber-500/50 hover:bg-amber-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-      aria-label={`Open backlog — ${total} task${total === 1 ? '' : 's'}`}
-    >
+    <section className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+      {/* Header lives outside the Link wrapping the body so the reorder
+          arrows aren't nested inside an <a> (invalid HTML + swallows
+          clicks). The body + stripe below remain one big click target. */}
       <header className="mb-2 flex items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-2">
           <h2 className="text-sm font-medium uppercase tracking-wider text-amber-300">
             Backlog
           </h2>
+          <WidgetReorderControls id="backlog" />
           <span className="text-xs text-amber-400/80">
             {total} task{total === 1 ? '' : 's'} missed
           </span>
         </div>
-        <span className="text-xs text-amber-300/80 transition-colors group-hover:text-amber-200">
+        <Link
+          to="/backlog"
+          className="text-xs text-amber-300/80 transition-colors hover:text-amber-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+        >
           Open →
-        </span>
+        </Link>
       </header>
 
-      {/* 4-segment stripe. Each segment's width ∝ per-priority share;
-          zero-count priorities collapse (no visible segment). Colors
-          come from the user's palette so a palette tweak repaints here
-          too. */}
-      <div
-        className="flex h-2 w-full overflow-hidden rounded bg-neutral-900"
-        role="img"
-        aria-label={
-          `Backlog distribution — ` +
-          PRIORITY_ORDER.map((p) => `${p}: ${summary[p]}`).join(', ')
-        }
+      <Link
+        to="/backlog"
+        className="group block rounded transition-colors hover:bg-amber-500/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+        aria-label={`Open backlog — ${total} task${total === 1 ? '' : 's'}`}
       >
-        {PRIORITY_ORDER.map((p) => {
-          const n = summary[p];
-          if (n === 0) return null;
-          return (
-            <div
-              key={p}
-              style={{
-                width: `${(n / total) * 100}%`,
-                backgroundColor: colors[p],
-              }}
-              title={`${p}: ${n}`}
-            />
-          );
-        })}
-      </div>
-
-      {/* Per-priority labels below the stripe, only for non-zero
-          priorities. Keeps the widget self-explanatory without a
-          separate legend. */}
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.65rem] uppercase tracking-wide text-amber-200/70">
-        {PRIORITY_ORDER.map((p) => {
-          const n = summary[p];
-          if (n === 0) return null;
-          return (
-            <span key={p} className="inline-flex items-center gap-1">
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: colors[p] }}
-                aria-hidden="true"
+        {/* 4-segment stripe. Each segment's width ∝ per-priority share;
+            zero-count priorities collapse (no visible segment). Colors
+            come from the user's palette so a palette tweak repaints
+            here too. */}
+        <div
+          className="flex h-2 w-full overflow-hidden rounded bg-neutral-900"
+          role="img"
+          aria-label={
+            `Backlog distribution — ` +
+            PRIORITY_ORDER.map((p) => `${p}: ${summary[p]}`).join(', ')
+          }
+        >
+          {PRIORITY_ORDER.map((p) => {
+            const n = summary[p];
+            if (n === 0) return null;
+            return (
+              <div
+                key={p}
+                style={{
+                  width: `${(n / total) * 100}%`,
+                  backgroundColor: colors[p],
+                }}
+                title={`${p}: ${n}`}
               />
-              {p} {n}
-            </span>
-          );
-        })}
-      </div>
-    </Link>
+            );
+          })}
+        </div>
+
+        {/* Per-priority labels below the stripe, only for non-zero
+            priorities. Keeps the widget self-explanatory without a
+            separate legend. */}
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.65rem] uppercase tracking-wide text-amber-200/70">
+          {PRIORITY_ORDER.map((p) => {
+            const n = summary[p];
+            if (n === 0) return null;
+            return (
+              <span key={p} className="inline-flex items-center gap-1">
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: colors[p] }}
+                  aria-hidden="true"
+                />
+                {p} {n}
+              </span>
+            );
+          })}
+        </div>
+      </Link>
+    </section>
   );
 }

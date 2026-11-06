@@ -9,6 +9,7 @@ import {
 } from '../../lib/tasks-api';
 import { PRIORITY_SORT_INDEX, PriorityBadge } from '../tasks/PriorityBadge';
 import { usePriorityColors, withAlpha } from '../tasks/priority-colors';
+import { WidgetReorderControls } from './WidgetReorderControls';
 
 // Dashboard widget — "Ongoing Tasks" (Tasks.md §4.2 item 2 /
 // Dashboard.md §3 `ongoing_tasks`). Compact list of incomplete ongoing
@@ -43,9 +44,12 @@ export function OngoingTasksWidget() {
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
       <header className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
-          Ongoing tasks
-        </h2>
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
+            Ongoing tasks
+          </h2>
+          <WidgetReorderControls id="ongoing_tasks" />
+        </div>
         <Link
           to="/tasks"
           className="text-xs text-emerald-400 transition hover:text-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"

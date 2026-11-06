@@ -6,6 +6,7 @@ import {
 } from '../../lib/activity-api';
 import { formatDuration } from '../../lib/format-duration';
 import { TopTargetsList } from '../activity/TopTargetsList';
+import { WidgetReorderControls } from './WidgetReorderControls';
 
 // Compact dashboard widget — "Today's activity" (Activity.md §4.2).
 //
@@ -31,9 +32,12 @@ export function TodayActivityWidget() {
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
       <header className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
-          Today's activity
-        </h2>
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
+            Today's activity
+          </h2>
+          <WidgetReorderControls id="today_activity" />
+        </div>
         <Link
           to="/activity"
           className="text-xs text-emerald-400 transition hover:text-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
