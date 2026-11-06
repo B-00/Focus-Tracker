@@ -9,18 +9,18 @@ interface Options {
 
 /// `pnpm --filter @focus-tracker/api nightly-maintenance [--email me@x.com]`
 ///
-/// Runs the Tasks.md §5.5 Step 3 (transfer + backlog) over missed dated
-/// single-day tasks. Default: all users. `--email` / `--user-id` scope
-/// to a single user — useful for dev / tests.
+/// Runs the full Tasks.md §5.5 nightly maintenance: Step 1 (routine
+/// instance materialisation) → Step 2 (dated score snapshot) → Step 3
+/// (transfer + backlog) → Step 4 (routine score snapshot), per day, for
+/// each user. Default: all users. `--email` / `--user-id` scope to one.
 ///
-/// Schedule this via Windows Task Scheduler / cron at ~05:00 UTC (after
-/// local midnight for most of the world). Idempotent: re-running within
-/// the same local day is a no-op since all newly-eligible tasks have
-/// already moved.
+/// Normally driven by MaintenanceScheduler (@Cron EVERY_DAY_AT_5AM +
+/// bootstrap-fire). This CLI stays available as a manual escape hatch
+/// for dev / testing / debugging. Idempotent — safe to re-run.
 @Command({
   name: 'nightly-maintenance',
   description:
-    'Run the Tasks.md §5.5 nightly maintenance (Step 3 only until charts land).',
+    'Run the Tasks.md §5.5 nightly maintenance (all four steps).',
 })
 export class NightlyMaintenanceCommand extends CommandRunner {
   constructor(
@@ -50,22 +50,29 @@ export class NightlyMaintenanceCommand extends CommandRunner {
       ? await Promise.all(targetUserIds.map((id) => this.maintenance.runForUser(id)))
       : await this.maintenance.runForAllUsers();
 
-    const totalTransferred = reports.reduce((s, r) => s + r.transferredCount, 0);
-    const totalBacklogged = reports.reduce((s, r) => s + r.backloggedCount, 0);
+    const sum = (pick: (r: (typeof reports)[number]) => number) =>
+      reports.reduce((s, r) => s + pick(r), 0);
 
     // eslint-disable-next-line no-console
     console.log(
       `\nnightly-maintenance complete:` +
-        `\n  users processed: ${reports.length}` +
-        `\n  transferred:     ${totalTransferred}` +
-        `\n  backlogged:      ${totalBacklogged}` +
+        `\n  users processed:      ${reports.length}` +
+        `\n  days processed:       ${sum((r) => r.daysProcessed)}` +
+        `\n  routine instances +=  ${sum((r) => r.routineInstancesCreated)}` +
+        `\n  dated score rows:     ${sum((r) => r.datedScoreRowsUpserted)}` +
+        `\n  routine score rows:   ${sum((r) => r.routineScoreRowsUpserted)}` +
+        `\n  transferred:          ${sum((r) => r.transferredCount)}` +
+        `\n  backlogged:           ${sum((r) => r.backloggedCount)}` +
         (reports.length <= 5
           ? '\n' +
             reports
               .map(
                 (r) =>
-                  `    ${r.userId} (${r.tz}, ${r.today}): ` +
-                  `transferred=${r.transferredCount} backlogged=${r.backloggedCount}`,
+                  `    ${r.userId} (${r.tz}, today=${r.today}): ` +
+                  `days=${r.daysProcessed}` +
+                  (r.firstProcessedDay && r.lastProcessedDay
+                    ? ` [${r.firstProcessedDay}..${r.lastProcessedDay}]`
+                    : ''),
               )
               .join('\n')
           : '') +
@@ -90,5 +97,5 @@ export class NightlyMaintenanceCommand extends CommandRunner {
   }
 }
 
-// RunReport type lives on MaintenanceService internally; re-export not
-// needed — CLI just consumes { transferredCount, backloggedCount, userId, tz, today }.
+// RunReport type lives on MaintenanceService internally; the CLI just
+// reads the public counter fields it returns.

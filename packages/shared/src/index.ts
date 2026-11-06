@@ -167,6 +167,30 @@ export type {
 } from './tasks.js';
 
 // ---------------------------------------------------------------------------
+//  Consistency Charts (TaskCharts.md)
+// ---------------------------------------------------------------------------
+export {
+  computeBaseScore,
+  computeBacklogPenalty,
+  backlogDecayTerms,
+  sumWeight,
+  CHART_DEFAULT_RANGE_DAYS,
+  CHART_MAX_RANGE_DAYS,
+  chartRangeQuerySchema,
+  routineChartPointSchema,
+  datedChartPointSchema,
+  routineChartSeriesResponseSchema,
+  datedChartSeriesResponseSchema,
+} from './charts.js';
+export type {
+  ChartRangeQuery,
+  RoutineChartPoint,
+  DatedChartPoint,
+  RoutineChartSeriesResponse,
+  DatedChartSeriesResponse,
+} from './charts.js';
+
+// ---------------------------------------------------------------------------
 //  Pairing + Devices (Auth.md §5)
 // ---------------------------------------------------------------------------
 export {

@@ -8,8 +8,10 @@ import { MaintenanceService } from './maintenance.service';
 ///
 /// Why bootstrap-fire too? If the API was down at 05:00 UTC, the
 /// cron tick gets missed. Firing on startup catches up the next time
-/// you bring the server up. Safe because Step 3 (the only step we
-/// run right now) is idempotent — re-running the same day is a no-op.
+/// you bring the server up. Safe because every step is idempotent
+/// (createMany skipDuplicates for Step 1, upsert for Steps 2/4,
+/// mutually-exclusive partition for Step 3) — re-running the same
+/// day is a no-op.
 ///
 /// The CLI command (`pnpm --filter @focus-tracker/api nightly-
 /// maintenance`) stays available as a manual escape hatch for force-
@@ -17,12 +19,10 @@ import { MaintenanceService } from './maintenance.service';
 /// call the same MaintenanceService.runForAllUsers() so there's only
 /// one code path to reason about.
 ///
-/// ponytail: no "last-run" tracking table. Fine for Slice 3 because
-/// transfer+backlog is self-correcting. Slice 5's daily-score steps
-/// will need honest day-tracking (missed days must be back-computed);
-/// at that point promote this to a per-user, per-date log and gate
-/// each day's work on the log. Upgrade path noted here, not built
-/// speculatively.
+/// Day-tracking watermark lives in the two daily-score tables
+/// (max(date) per user). No separate "last-run" log is needed —
+/// MaintenanceService reads this on each run to decide where to
+/// resume. MAX_CATCHUP_DAYS caps worst-case loop size.
 @Injectable()
 export class MaintenanceScheduler implements OnApplicationBootstrap {
   private readonly logger = new Logger(MaintenanceScheduler.name);
@@ -51,11 +51,16 @@ export class MaintenanceScheduler implements OnApplicationBootstrap {
   private async runOnce(trigger: 'bootstrap' | 'cron'): Promise<void> {
     try {
       const reports = await this.maintenance.runForAllUsers();
-      const transferred = reports.reduce((s, r) => s + r.transferredCount, 0);
-      const backlogged = reports.reduce((s, r) => s + r.backloggedCount, 0);
+      const sum = (pick: (r: (typeof reports)[number]) => number) =>
+        reports.reduce((s, r) => s + pick(r), 0);
       this.logger.log(
         `${trigger}: processed ${reports.length} users, ` +
-          `transferred=${transferred} backlogged=${backlogged}`,
+          `days=${sum((r) => r.daysProcessed)} ` +
+          `routineInst+=${sum((r) => r.routineInstancesCreated)} ` +
+          `datedScore=${sum((r) => r.datedScoreRowsUpserted)} ` +
+          `routineScore=${sum((r) => r.routineScoreRowsUpserted)} ` +
+          `transferred=${sum((r) => r.transferredCount)} ` +
+          `backlogged=${sum((r) => r.backloggedCount)}`,
       );
     } catch (err) {
       this.logger.error(
