@@ -4,7 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchMeProfile, meQueryKeys } from '../lib/me-api';
 import { computeLifeStats, parseBirthday } from '../lib/life-math';
 import { useLifeColors } from '../lib/life-colors';
+import { LIFE_SIZE_PRESETS, useLifeSize } from '../lib/life-size';
 import { LifeColorPicker } from './life/LifeColorPicker';
+import { LifeSizePicker } from './life/LifeSizePicker';
 
 // /life — Memento Mori life calendar (MementoMori.md §3.1).
 //
@@ -14,20 +16,12 @@ import { LifeColorPicker } from './life/LifeColorPicker';
 //   * Row gap every 10 years to group decades visually.
 //   * Column gap at week 26/27 to split the year in half.
 //
-// ponytail (perf): colors are passed to cells as CSS variables on an
-// ancestor, not as React props. The cell DOM never changes when a
-// swatch is dragged — only the browser repaints the resolved color.
-// DecadeRow + HalfGrid are React.memo'd on their index props so a
-// colors-store notification won't re-render ~5000 cell divs on every
-// drag tick. The picker itself stays spec-identical to the tasks
-// picker (native <input type=color>, same store contract).
-
-const CELL_PX = 10;
-const CELL_GAP_PX = 2;
-const DECADE_GAP_PX = 10;    // between every block of 10 years (Y axis)
-const HALF_GAP_PX = 10;      // single mid-year gap at week 26/27 (X axis)
-const YEAR_AXIS_WIDTH_PX = 32;
-const WEEK_AXIS_HEIGHT_PX = 18;
+// ponytail (perf): BOTH colors and sizes are passed to cells as CSS
+// variables on an ancestor <main>, not as React props. Dragging a color
+// swatch or picking a new size is one CSS-var write + browser repaint;
+// no React re-render of thousands of memo'd cells. DecadeRow + HalfGrid
+// are React.memo'd on their index-only props so the ancestor style
+// change doesn't cascade into the subtree.
 
 const WEEKS_PER_YEAR = 52;
 const HALF_WEEKS = 26;       // first half: weeks 1..26; second half: weeks 27..52
@@ -88,8 +82,9 @@ function BirthdayOnboarding() {
 }
 
 // ---------------------------------------------------------------------------
-//  Grid shell — publishes the color palette as CSS vars so cells don't need
-//  to re-render on palette change. Chunks years into decade blocks.
+//  Grid shell — publishes the color palette AND size preset as CSS vars.
+//  Chunks years into decade blocks. No overflow wrapper — the page
+//  itself scrolls if the grid outgrows the viewport.
 // ---------------------------------------------------------------------------
 
 interface GridProps {
@@ -103,6 +98,8 @@ function LifeGrid({ birthday, lifeExpectancyYears }: GridProps) {
     [birthday, lifeExpectancyYears],
   );
   const colors = useLifeColors();
+  const sizeKey = useLifeSize();
+  const size = LIFE_SIZE_PRESETS[sizeKey];
 
   const totalWeeks = stats.totalWeeks;
   // Clamp currentWeekIndex into [0, totalWeeks) so a future birthday or an
@@ -122,15 +119,20 @@ function LifeGrid({ birthday, lifeExpectancyYears }: GridProps) {
     return out;
   }, [lifeExpectancyYears]);
 
-  // ponytail (perf): publishing the 3 user colors as CSS vars means dragging
-  // a swatch is a single CSS-variable update + browser repaint — not a
-  // React re-render of thousands of cells. Downstream DecadeRow/HalfGrid
-  // are memo'd on their index-only props so this style change on <main>
-  // doesn't cascade.
+  // ponytail (perf): publish 3 colors + 5 size dimensions as CSS vars.
+  // Cells + axis strips reference them via var(...) so a picker change
+  // is a single style update on <main> and a browser repaint — not a
+  // React re-render of the ~5000 cell subtree.
   const cssVars = {
     '--c-lived': colors.lived,
     '--c-this': colors.thisWeek,
     '--c-rem': colors.remaining,
+    '--cell': `${size.cell}px`,
+    '--cell-gap': `${size.gap}px`,
+    '--block-gap': `${size.blockGap}px`,
+    '--axis-font': size.axisFont,
+    '--year-axis-w': `${size.axisW}px`,
+    '--week-axis-h': `${size.axisH}px`,
   } as CSSProperties;
 
   return (
@@ -164,28 +166,31 @@ function LifeGrid({ birthday, lifeExpectancyYears }: GridProps) {
             )}
           </p>
         </div>
-        <LifeColorPicker />
+        <div className="flex flex-col gap-2">
+          <LifeSizePicker />
+          <LifeColorPicker />
+        </div>
       </header>
 
-      <div className="overflow-x-auto">
-        <div className="mx-auto w-fit">
-          {/* Outer flex: year-axis column on the left, then (week-axis +
-              decade rows) on the right. */}
-          <div className="flex items-start" style={{ gap: `${CELL_GAP_PX * 2}px` }}>
-            <YearAxis decades={decades} />
+      {/* No overflow wrapper — the page's own scroll handles any grid
+          wider than the viewport. Nested overflow-x: auto forces
+          overflow-y to auto per CSS spec and that's the internal
+          scrollbar we just killed. */}
+      <div className="mx-auto w-fit">
+        <div className="flex items-start" style={{ gap: 'var(--cell-gap)' }}>
+          <YearAxis decades={decades} />
 
-            <div>
-              <WeekAxisTop />
-              <div className="flex flex-col" style={{ gap: `${DECADE_GAP_PX}px` }}>
-                {decades.map(({ startYear, yearsInDecade }, decadeIdx) => (
-                  <DecadeRow
-                    key={decadeIdx}
-                    startYear={startYear}
-                    yearsInDecade={yearsInDecade}
-                    currentWeekIndex={current}
-                  />
-                ))}
-              </div>
+          <div>
+            <WeekAxisTop />
+            <div className="flex flex-col" style={{ gap: 'var(--block-gap)' }}>
+              {decades.map(({ startYear, yearsInDecade }, decadeIdx) => (
+                <DecadeRow
+                  key={decadeIdx}
+                  startYear={startYear}
+                  yearsInDecade={yearsInDecade}
+                  currentWeekIndex={current}
+                />
+              ))}
             </div>
           </div>
         </div>
@@ -201,13 +206,10 @@ function LifeGrid({ birthday, lifeExpectancyYears }: GridProps) {
 
 // ---------------------------------------------------------------------------
 //  Axis strips — kept outside the cell grids so cells stay uniform.
+//  All dimensions are CSS vars so a size-preset switch just repaints.
 // ---------------------------------------------------------------------------
 
 function WeekAxisTop() {
-  // Two-half layout matching the grid below: 26 week slots + mid-gap +
-  // 26 week slots. Labels at week 1 + every 5 weeks, plus the two
-  // halves' boundary weeks (26 implicit, 27 implicit — we skip them so
-  // the gap stays clean).
   const leftLabels: (number | null)[] = [];
   for (let w = 0; w < HALF_WEEKS; w++) {
     const weekNum = w + 1;
@@ -222,48 +224,52 @@ function WeekAxisTop() {
   }
 
   return (
-    <div className="flex" style={{ gap: `${HALF_GAP_PX}px`, height: `${WEEK_AXIS_HEIGHT_PX}px` }}>
+    <div
+      className="flex"
+      style={{ gap: 'var(--block-gap)', height: 'var(--week-axis-h)' }}
+    >
       <AxisRow labels={leftLabels} />
       <AxisRow labels={rightLabels} />
     </div>
   );
 }
 
-function AxisRow({ labels }: { labels: (number | null)[] }) {
+const AxisRow = memo(function AxisRow({ labels }: { labels: (number | null)[] }) {
   return (
     <div
       className="grid"
       style={{
-        gridTemplateColumns: `repeat(${labels.length}, ${CELL_PX}px)`,
-        columnGap: `${CELL_GAP_PX}px`,
+        gridTemplateColumns: `repeat(${labels.length}, var(--cell))`,
+        columnGap: 'var(--cell-gap)',
       }}
     >
       {labels.map((label, i) => (
         <div
           key={i}
-          className="flex items-end justify-center text-[0.6rem] leading-none text-neutral-500"
+          className="flex items-end justify-center leading-none text-neutral-500"
+          style={{ fontSize: 'var(--axis-font)' }}
         >
           {label ?? ''}
         </div>
       ))}
     </div>
   );
-}
+});
 
 interface YearAxisProps {
   decades: { startYear: number; yearsInDecade: number }[];
 }
 
-function YearAxis({ decades }: YearAxisProps) {
+const YearAxis = memo(function YearAxis({ decades }: YearAxisProps) {
   return (
     <div
       className="flex flex-col"
       style={{
-        width: `${YEAR_AXIS_WIDTH_PX}px`,
+        width: 'var(--year-axis-w)',
         // Match the top padding of the weekly axis so row 1 aligns with
         // the first cell in the grid.
-        paddingTop: `${WEEK_AXIS_HEIGHT_PX}px`,
-        gap: `${DECADE_GAP_PX}px`,
+        paddingTop: 'var(--week-axis-h)',
+        gap: 'var(--block-gap)',
       }}
     >
       {decades.map(({ startYear, yearsInDecade }, i) => (
@@ -271,9 +277,9 @@ function YearAxis({ decades }: YearAxisProps) {
       ))}
     </div>
   );
-}
+});
 
-function YearAxisBlock({
+const YearAxisBlock = memo(function YearAxisBlock({
   startYear,
   yearsInDecade,
 }: {
@@ -284,8 +290,8 @@ function YearAxisBlock({
     <div
       className="grid"
       style={{
-        gridTemplateRows: `repeat(${yearsInDecade}, ${CELL_PX}px)`,
-        rowGap: `${CELL_GAP_PX}px`,
+        gridTemplateRows: `repeat(${yearsInDecade}, var(--cell))`,
+        rowGap: 'var(--cell-gap)',
       }}
     >
       {Array.from({ length: yearsInDecade }, (_, y) => {
@@ -295,7 +301,8 @@ function YearAxisBlock({
         return (
           <div
             key={y}
-            className="flex items-center justify-end pr-1 text-[0.6rem] leading-none text-neutral-500"
+            className="flex items-center justify-end pr-1 leading-none text-neutral-500"
+            style={{ fontSize: 'var(--axis-font)' }}
           >
             {show ? yearNum : ''}
           </div>
@@ -303,10 +310,10 @@ function YearAxisBlock({
       })}
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
-//  DecadeRow + HalfGrid — memo'd so color-store updates don't cascade.
+//  DecadeRow + HalfGrid — memo'd so color/size-store updates don't cascade.
 //  Cells inside read CSS vars rather than React props for the background.
 // ---------------------------------------------------------------------------
 
@@ -322,7 +329,7 @@ const DecadeRow = memo(function DecadeRow({
   currentWeekIndex,
 }: DecadeRowProps) {
   return (
-    <div className="flex" style={{ gap: `${HALF_GAP_PX}px` }}>
+    <div className="flex" style={{ gap: 'var(--block-gap)' }}>
       <HalfGrid
         startYear={startYear}
         yearsInDecade={yearsInDecade}
@@ -384,16 +391,14 @@ const HalfGrid = memo(function HalfGrid({
       }
       className="grid"
       style={{
-        gridTemplateColumns: `repeat(${weekCount}, ${CELL_PX}px)`,
-        gridTemplateRows: `repeat(${yearsInDecade}, ${CELL_PX}px)`,
-        gap: `${CELL_GAP_PX}px`,
+        gridTemplateColumns: `repeat(${weekCount}, var(--cell))`,
+        gridTemplateRows: `repeat(${yearsInDecade}, var(--cell))`,
+        gap: 'var(--cell-gap)',
       }}
     >
       {cells.map(({ idx, year, week }) => {
         const isCurrent = idx === currentWeekIndex;
         const isPast = idx < currentWeekIndex;
-        // CSS-variable backgrounds — see the ponytail note on LifeGrid for
-        // why this matters for picker lag.
         const bg = isCurrent
           ? 'var(--c-this)'
           : isPast
