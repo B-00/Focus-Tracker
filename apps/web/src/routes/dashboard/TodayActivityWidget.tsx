@@ -73,8 +73,6 @@ export function TodayActivityWidget() {
             </p>
           </div>
 
-          <MiniBar buckets={data.buckets} />
-
           {/* Top apps stacked over top sites, compact donut variant so the
               widget stays short. Same component as the /activity page. */}
           <div className="flex flex-col gap-3">
@@ -103,52 +101,3 @@ export function TodayActivityWidget() {
   );
 }
 
-// Tiny no-axis silhouette of today's hourly buckets. Just the shape, no
-// labels — the user can click through to `/activity` for the full view.
-function MiniBar({
-  buckets,
-}: {
-  buckets: { apps: number; sites: number }[];
-}) {
-  let maxMs = 0;
-  for (const b of buckets) {
-    const total = b.apps + b.sites;
-    if (total > maxMs) maxMs = total;
-  }
-  const denom = Math.max(maxMs, 1);
-
-  return (
-    <div
-      className="flex h-12 items-end gap-0.5"
-      role="img"
-      aria-label="Hourly activity silhouette"
-    >
-      {buckets.map((b, i) => {
-        const total = b.apps + b.sites;
-        const heightFrac = total / denom;
-        const sitesShare = total === 0 ? 0 : b.sites / total;
-        return (
-          <div key={i} className="flex h-full flex-1 flex-col justify-end">
-            {total === 0 ? (
-              <div className="h-px w-full bg-neutral-800" />
-            ) : (
-              <div
-                className="flex w-full flex-col-reverse"
-                style={{ height: `${heightFrac * 100}%` }}
-              >
-                <div
-                  className="bg-sky-500/70"
-                  style={{ height: `${(1 - sitesShare) * 100}%` }}
-                />
-                <div
-                  className="bg-yellow-400/70"
-                  style={{ height: `${sitesShare * 100}%` }}
-                />
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
