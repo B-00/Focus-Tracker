@@ -211,34 +211,9 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-8" style={cssVars}>
       <header className="mb-6 flex flex-wrap items-start justify-between gap-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Your life, one week at a time
-          </h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            {stats.currentWeekIndex < 0 ? (
-              'Grid starts on your birthday.'
-            ) : stats.currentWeekIndex >= totalWeeks ? (
-              <>You&apos;re past your estimated lifespan. Adjust it in Settings if you like.</>
-            ) : (
-              <>
-                Week{' '}
-                <span className="font-semibold text-neutral-200">
-                  {stats.currentWeekIndex.toLocaleString()}
-                </span>{' '}
-                of{' '}
-                <span className="font-semibold text-neutral-200">
-                  {totalWeeks.toLocaleString()}
-                </span>
-                {' · '}
-                <span className="font-semibold text-neutral-200">
-                  {stats.percentLived.toFixed(1)}%
-                </span>{' '}
-                lived
-              </>
-            )}
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Your life, one week at a time
+        </h1>
         <div className="flex flex-wrap items-start gap-2">
           <LifeSizePicker />
           <LifeColorPicker />
@@ -249,8 +224,34 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
       {/* No overflow wrapper — the page's own scroll handles any grid
           wider than the viewport. Nested overflow-x: auto forces
           overflow-y to auto per CSS spec and that's the internal
-          scrollbar we just killed. */}
+          scrollbar we just killed.
+          "Week N of M · X% lived" lives inside the grid wrapper now so
+          it sits left-aligned above the first row of cells per the
+          user's layout call. */}
       <div className="mx-auto w-fit" onMouseLeave={onGridLeave}>
+        <p className="mb-2 text-sm text-neutral-400">
+          {stats.currentWeekIndex < 0 ? (
+            'Grid starts on your birthday.'
+          ) : stats.currentWeekIndex >= totalWeeks ? (
+            <>You&apos;re past your estimated lifespan. Adjust it in Settings if you like.</>
+          ) : (
+            <>
+              Week{' '}
+              <span className="font-semibold text-neutral-200">
+                {stats.currentWeekIndex.toLocaleString()}
+              </span>{' '}
+              of{' '}
+              <span className="font-semibold text-neutral-200">
+                {totalWeeks.toLocaleString()}
+              </span>
+              {' · '}
+              <span className="font-semibold text-neutral-200">
+                {stats.percentLived.toFixed(1)}%
+              </span>{' '}
+              lived
+            </>
+          )}
+        </p>
         <div className="flex items-start" style={{ gap: 'var(--cell-gap)' }}>
           <YearAxis decades={decades} />
 

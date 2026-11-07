@@ -58,7 +58,7 @@ export function LifeColorPicker() {
             className="flex min-w-0 flex-1 flex-col items-center gap-1"
           >
             <span
-              className="relative block h-7 w-full rounded border border-neutral-700 shadow-inner"
+              className="relative block h-5 w-5 rounded-sm border border-neutral-700 shadow-inner"
               style={{ backgroundColor: colors[role] }}
               title={`${label} — ${hint}`}
             >
@@ -66,7 +66,7 @@ export function LifeColorPicker() {
                 type="color"
                 value={colors[role]}
                 onChange={(e) => setLifeColor(role, e.currentTarget.value)}
-                className="absolute inset-0 h-full w-full cursor-pointer rounded opacity-0"
+                className="absolute inset-0 h-full w-full cursor-pointer rounded-sm opacity-0"
                 aria-label={`${label} color`}
               />
             </span>
