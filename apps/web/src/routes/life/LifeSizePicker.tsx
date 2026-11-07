@@ -28,7 +28,12 @@ export function LifeSizePicker() {
       <div
         role="radiogroup"
         aria-label="Life grid size"
-        className="flex gap-1"
+        // < xl: single row (S M L XL) — picker sits in the horizontal
+        //       row above the grid where vertical real estate is tight.
+        // ≥ xl: 2×2 grid (S M / L XL) — picker sits in the narrow
+        //       sticky right rail where a shorter, wider shape reads
+        //       better than a long pill strip.
+        className="flex gap-1 xl:grid xl:grid-cols-2"
       >
         {SIZES.map(({ id, label }) => {
           const active = id === current;
