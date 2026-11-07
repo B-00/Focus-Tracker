@@ -6,8 +6,12 @@ import {
 } from '../../lib/life-colors';
 import { LIFE_HEATMAP_LABELS, type HeatmapActiveTier } from '../../lib/life-heatmap';
 
-// Vertical list of (swatch + tier-range) rows. Shares visual shape
-// with LifeColorPicker — both live in the sticky right rail on /life.
+// Heatmap-tier colour picker. Mirrors LifeColorPicker's responsive
+// shape — one HTML structure, two layouts via `xl:` classes:
+//   • < xl (tablet / smaller): horizontal row of (swatch over label)
+//     pill-style items.
+//   • ≥ xl (desktop)        : vertical list of (swatch + label) rows
+//     for the sticky right rail on /life.
 //
 // Doubles as the activity legend — spec §4.2 wants a visual key near
 // the grid, and this picker already shows each tier's color + hour
@@ -53,14 +57,20 @@ export function LifeHeatmapColorPicker() {
       </header>
 
       <ul
-        className="flex flex-col gap-1.5"
+        // < xl: row of pills (fixed w-14 per item so all 4 swatches
+        //       align with identical gaps).
+        // ≥ xl: vertical rows (swatch left, label right).
+        className="flex flex-row gap-2 xl:flex-col xl:gap-1.5"
         role="group"
         aria-label="Heatmap tier colors"
       >
         {ROWS.map(({ role, tier }) => {
           const label = LIFE_HEATMAP_LABELS[tier];
           return (
-            <li key={role} className="flex items-center gap-2">
+            <li
+              key={role}
+              className="flex w-14 flex-col items-center gap-1 xl:w-auto xl:flex-row xl:gap-2"
+            >
               <span
                 className="relative block h-5 w-5 shrink-0 rounded-sm border border-neutral-700 shadow-inner"
                 style={{ backgroundColor: colors[role] }}

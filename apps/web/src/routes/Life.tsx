@@ -216,20 +216,22 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
         </h1>
       </header>
 
-      {/* Three-column CSS grid: [1fr spacer] [auto grid] [1fr aside].
-          The two 1fr rails push equally from both sides, so the middle
-          'auto' column (the life grid) stays horizontally centred in
-          <main> regardless of how wide the right rail is. The aside
-          then uses justify-self-end to hug the right edge of the
-          right-hand rail with the main's px-4 as its gap to the
-          viewport.
-          No overflow wrapper — the page's own scroll handles any grid
-          wider than the viewport; a nested overflow-x: auto would
-          force overflow-y: auto per CSS spec and introduce an inner
-          scrollbar we don't want. */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-6">
-        <div aria-hidden="true" />
-        <div className="w-fit" onMouseLeave={onGridLeave}>
+      {/* Responsive layout:
+          • < xl  (tablet / smaller) — flex column. Pickers sit above
+            the grid, right-aligned, with each inner picker back to a
+            horizontal row of swatches (handled inside the pickers via
+            `xl:` classes). Order swap via order-1/order-2 puts the
+            aside on top even though it comes second in markup.
+          • ≥ xl (desktop)          — 3-col CSS grid [1fr spacer] [auto
+            grid] [1fr aside]. The two 1fr rails push equally from both
+            sides so the middle 'auto' column (the life grid) stays
+            horizontally centred in <main> regardless of rail width,
+            and the aside goes sticky.
+          No overflow wrapper either way — the page's own scroll
+          handles any grid wider than the viewport. */}
+      <div className="flex flex-col items-center gap-6 xl:grid xl:grid-cols-[1fr_auto_1fr] xl:items-start">
+        <div aria-hidden="true" className="hidden xl:block" />
+        <div className="order-2 w-fit xl:order-none" onMouseLeave={onGridLeave}>
           <p className="mb-2 text-base text-neutral-400">
             {stats.currentWeekIndex < 0 ? (
               'Grid starts on your birthday.'
@@ -276,11 +278,12 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
 
         <aside
           aria-label="Life grid settings"
-          // top-16 (64px) = AppShell's h-12 sticky nav (48px) + 16px
-          // breathing room, so the top of the picker rail clears the
-          // nav as the user scrolls down the long grid. justify-self-end
-          // pushes the rail to the right edge of its 1fr grid column.
-          className="sticky top-16 flex flex-col gap-2 self-start justify-self-end"
+          // < xl: wraps naturally in a row above the grid, right-aligned.
+          // ≥ xl: sticky right rail, pickers stacked vertically. top-16
+          // (64px) = AppShell's h-12 sticky nav (48px) + 16px breathing
+          // room so the rail clears the nav while scrolling the long
+          // grid. justify-self-end hugs the right edge of its 1fr column.
+          className="order-1 flex w-full flex-row flex-wrap items-start justify-end gap-2 xl:order-none xl:sticky xl:top-16 xl:w-auto xl:flex-col xl:justify-start xl:self-start xl:justify-self-end"
         >
           <LifeSizePicker />
           <LifeColorPicker />

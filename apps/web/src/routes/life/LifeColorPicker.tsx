@@ -6,10 +6,13 @@ import {
   type LifeColorRole,
 } from '../../lib/life-colors';
 
-// Vertical list of (swatch + label) rows for the life-grid cell roles.
-// Lives in the right-hand sticky rail on /life; the column shape fits
-// a narrow rail better than the wide pill row we used while this sat
-// inside the header.
+// Life-grid cell-role colour picker. Two visual shapes via `xl:`
+// responsive classes — HTML stays the same so the picker can live in
+// either placement without re-mounting:
+//   • < xl (tablet / smaller): horizontal row of (swatch over label)
+//     pill-style items, matches the pre-sticky header shape.
+//   • ≥ xl (desktop)        : vertical list of (swatch + label) rows,
+//     fits the narrow sticky right rail on /life.
 //
 // Reset button still sits next to the title; scope is "grid roles only"
 // (lived / thisWeek / remaining) — the heatmap picker owns its own
@@ -49,12 +52,19 @@ export function LifeColorPicker() {
       </header>
 
       <ul
-        className="flex flex-col gap-1.5"
+        // < xl: row of pills with fixed-width items so swatches align
+        //       evenly regardless of label length (fixes the uneven-
+        //       gap we hit before when labels varied in width).
+        // ≥ xl: vertical rows (swatch left, label right).
+        className="flex flex-row gap-2 xl:flex-col xl:gap-1.5"
         role="group"
         aria-label="Grid cell colors"
       >
         {ROWS.map(({ role, label, hint }) => (
-          <li key={role} className="flex items-center gap-2">
+          <li
+            key={role}
+            className="flex w-16 flex-col items-center gap-1 xl:w-auto xl:flex-row xl:gap-2"
+          >
             <span
               className="relative block h-5 w-5 shrink-0 rounded-sm border border-neutral-700 shadow-inner"
               style={{ backgroundColor: colors[role] }}
