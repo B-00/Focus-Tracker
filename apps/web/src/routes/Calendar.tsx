@@ -1,8 +1,16 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { SectionResponse, TaskResponse } from '@focus-tracker/shared';
 import {
+  TASK_PRIORITIES,
+  type CreateTaskRequest,
+  type SectionResponse,
+  type TaskPriority,
+  type TaskResponse,
+} from '@focus-tracker/shared';
+import {
+  createTask,
+  deleteTask,
   listSections,
   listTasks,
   sectionsQueryKeys,
@@ -14,19 +22,23 @@ import {
   withAlpha,
 } from './tasks/priority-colors';
 
-// /calendar — Slice 1 (Calendar.md §5 / §3).
+// /calendar — Slices 1–3 (Calendar.md §5 / §3 / §4.1).
 //
-// Scope locked at this slice:
+// Scope now:
 //   - Month grid: 7 cols × 5–6 rows, Monday-first (§5.1).
 //   - Prev / Next / Today header controls (§5).
 //   - Single-day dated tasks render as pills in their day cell (§3.1).
-//   - Today cell visually distinct (§3.3).
+//   - Today cell visually distinct (§3.2).
+//   - Per-cell hover tooltip listing the day's tasks (§3.3).
+//   - Click an empty area of a cell → inline composer with title +
+//     priority (required) + section + end-date toggle (§4.1).
+//   - Composer also lists the day's existing tasks with inline
+//     confirm-then-delete, mirroring the /tasks row pattern so users
+//     can prune a day without leaving the calendar.
 //
 // Deferred (later slices):
 //   - Multi-day range bars that span cells (§3.1).
-//   - Past-focus-session day indicator + popover (§3.2 / §4.4).
-//   - Click empty day → inline composer (§4.1).
-//   - Click pill → edit / delete popover (§4.2 / §4.3).
+//   - Click pill → edit popover (§4.2).
 //   - Server-side `?from=&to=` filtering — v1 personal data is small
 //     enough that fetching all dated tasks and filtering client-side is
 //     trivially fast. ponytail: single-user scale; upgrade path is to
@@ -35,7 +47,8 @@ import {
 //
 // Data: reuses the shared `tasks` query key with `{kind: 'dated'}`, so
 // a dated-task change anywhere else (Dashboard, /tasks) invalidates
-// this surface for free.
+// this surface for free. Create also hits the shared `createTask`
+// mutation so the server contract matches /tasks exactly.
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -53,6 +66,10 @@ export function CalendarPage() {
   // from "today" so we can freely navigate without clobbering the Today
   // affordance.
   const [cursor, setCursor] = useState<Date>(() => startOfMonth(new Date()));
+  // Only one composer can be open at a time (Calendar.md §4.1). Null when
+  // no cell is in compose mode; otherwise holds the YMD of the open cell.
+  // Esc / click-outside / successful submit all clear it.
+  const [composerDay, setComposerDay] = useState<string | null>(null);
 
   const sectionsQuery = useQuery({
     queryKey: sectionsQueryKeys.list(),
@@ -183,10 +200,15 @@ export function CalendarPage() {
               <DayCell
                 key={ymd}
                 date={day}
+                ymd={ymd}
                 inMonth={inMonth}
                 today={today}
                 tasks={tasks}
                 sectionsById={sectionsById}
+                sections={sectionsQuery.data ?? []}
+                composerOpen={composerDay === ymd}
+                onOpenComposer={() => setComposerDay(ymd)}
+                onCloseComposer={() => setComposerDay(null)}
               />
             );
           })}
@@ -198,13 +220,29 @@ export function CalendarPage() {
 
 interface DayCellProps {
   date: Date;
+  ymd: string;
   inMonth: boolean;
   today: boolean;
   tasks: TaskResponse[];
   sectionsById: Map<string, SectionResponse>;
+  sections: SectionResponse[];
+  composerOpen: boolean;
+  onOpenComposer: () => void;
+  onCloseComposer: () => void;
 }
 
-function DayCell({ date, inMonth, today, tasks, sectionsById }: DayCellProps) {
+function DayCell({
+  date,
+  ymd,
+  inMonth,
+  today,
+  tasks,
+  sectionsById,
+  sections,
+  composerOpen,
+  onOpenComposer,
+  onCloseComposer,
+}: DayCellProps) {
   const dayNum = date.getDate();
   // `role="gridcell"` is required by the grid above. We also label the
   // cell so screen readers announce "Today, June 12" per §3.2 / §8.
@@ -218,29 +256,45 @@ function DayCell({ date, inMonth, today, tasks, sectionsById }: DayCellProps) {
   // a month grid is 42 cells max and the tooltip only needs to clear
   // the cell it sits over — no viewport-edge drift worth solving.
   const hasTasks = tasks.length > 0;
+  // Only open the composer when the user actually clicked the cell
+  // background. Pills + composer internals call stopPropagation so they
+  // don't wake the open handler (otherwise clicking a pill or typing in
+  // the composer would re-open or steal focus).
+  function handleCellClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (composerOpen) return;
+    if (e.target !== e.currentTarget) {
+      // Clicked a child element; those are owned by pills / composer.
+      return;
+    }
+    onOpenComposer();
+  }
+  // ponytail: fade applies to in-flow children (date label + pills) only —
+  // putting opacity on the cell would bleed into the absolutely-positioned
+  // tooltip/composer and make them unreadable on leading/trailing month days.
+  const fadeClass = inMonth ? '' : 'opacity-40';
   return (
     <div
       role="gridcell"
       aria-label={today ? `Today, ${dateLabel}` : dateLabel}
+      onClick={handleCellClick}
       className={[
-        'group relative min-h-[6rem] rounded-md border p-1.5 text-xs',
+        'group relative min-h-[6rem] cursor-pointer rounded-md border p-1.5 text-xs',
         today
           ? 'border-emerald-500/60 bg-emerald-500/5'
           : 'border-neutral-800 bg-neutral-900/30',
-        inMonth ? '' : 'opacity-40',
       ].join(' ')}
     >
       <div
-        className={`mb-1 flex items-center justify-between text-[0.7rem] ${
+        className={`pointer-events-none mb-1 flex items-center justify-between text-[0.7rem] ${
           today ? 'text-emerald-300' : 'text-neutral-400'
-        }`}
+        } ${fadeClass}`}
       >
         <span className={today ? 'font-semibold' : ''}>{dayNum}</span>
         {today && (
           <span className="text-[0.6rem] uppercase tracking-wider">Today</span>
         )}
       </div>
-      <div className="flex flex-col gap-0.5">
+      <div className={`flex flex-col gap-0.5 ${fadeClass}`}>
         {tasks.map((t) => (
           <TaskPill
             key={t.id}
@@ -249,11 +303,21 @@ function DayCell({ date, inMonth, today, tasks, sectionsById }: DayCellProps) {
           />
         ))}
       </div>
-      {hasTasks && (
+      {hasTasks && !composerOpen && (
         <DayTooltip
           dateLabel={dateLabel}
           tasks={tasks}
           sectionsById={sectionsById}
+        />
+      )}
+      {composerOpen && (
+        <CellComposer
+          ymd={ymd}
+          dateLabel={dateLabel}
+          sections={sections}
+          tasks={tasks}
+          sectionsById={sectionsById}
+          onClose={onCloseComposer}
         />
       )}
     </div>
@@ -343,6 +407,302 @@ function TaskPill({ task, section }: TaskPillProps) {
       </span>
       <span className="truncate">{task.title}</span>
     </div>
+  );
+}
+
+// -------------------------------------------------------------------
+// CellComposer — inline dated-task creator (Calendar.md §4.1).
+//
+// Design decisions:
+//   - Dated-only. Calendar never creates routine/ongoing tasks.
+//   - startDate is fixed to the clicked day; the user can add an
+//     endDate for a range task (turns the pill into a future range —
+//     visible in Slice 5 when we render range bars).
+//   - priority is required, no default — same keyboard flow as the
+//     /tasks page: title → Tab → priority → Enter.
+//   - section is optional; omitted → Inbox (null sectionId).
+//   - Enter submits, Esc cancels, click-outside closes.
+//   - Reuses the shared `createTask` mutation + `tasksQueryKeys.all`
+//     invalidation so the pill shows up on /tasks and the dashboard
+//     widgets the instant the server returns.
+//
+// ponytail: all state local; no store needed. The one piece of
+// cross-cell state ("which cell is open") lives at CalendarPage so only
+// one composer is active at a time.
+// -------------------------------------------------------------------
+
+interface CellComposerProps {
+  ymd: string;
+  dateLabel: string;
+  sections: SectionResponse[];
+  tasks: TaskResponse[];
+  sectionsById: Map<string, SectionResponse>;
+  onClose: () => void;
+}
+
+function CellComposer({
+  ymd,
+  dateLabel,
+  sections,
+  tasks,
+  sectionsById,
+  onClose,
+}: CellComposerProps) {
+  const qc = useQueryClient();
+  const rootRef = useRef<HTMLFormElement>(null);
+  const [title, setTitle] = useState('');
+  const [priority, setPriority] = useState<TaskPriority | ''>('');
+  const [sectionId, setSectionId] = useState<string>(''); // '' = Inbox
+  const [addEnd, setAddEnd] = useState(false);
+  const [endDate, setEndDate] = useState<string>(ymd);
+
+  const createMutation = useMutation({
+    mutationFn: (body: CreateTaskRequest) => createTask(body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: tasksQueryKeys.all });
+      onClose();
+    },
+  });
+
+  // Close on Esc (anywhere) + click-outside this composer. Both reset
+  // the composer-open state at the parent; local state resets on unmount.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    function onDocClick(e: MouseEvent) {
+      const root = rootRef.current;
+      if (!root) return;
+      if (e.target instanceof Node && !root.contains(e.target)) onClose();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onDocClick);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onDocClick);
+    };
+  }, [onClose]);
+
+  const canSubmit =
+    title.trim().length > 0 &&
+    priority !== '' &&
+    !createMutation.isPending;
+
+  function submit() {
+    if (!canSubmit) return;
+    createMutation.mutate({
+      kind: 'dated',
+      title: title.trim(),
+      priority: priority as TaskPriority,
+      sectionId: sectionId === '' ? null : sectionId,
+      startDate: ymd,
+      endDate: addEnd && endDate !== ymd ? endDate : null,
+      /// transferIfMissed stays false here — the user can opt in from
+      /// the full /tasks editor. Covering it inline would bloat the
+      /// composer past "frictionless creation" (Calendar.md goal #2).
+      transferIfMissed: false,
+    });
+  }
+
+  return (
+    <form
+      ref={rootRef}
+      role="dialog"
+      aria-label={`New task on ${dateLabel}`}
+      // Stop the parent cell's click handler (and the document-level
+      // click-outside listener) from firing on inner clicks. Native form
+      // onSubmit handles Enter semantics correctly: Enter in <input type=text>
+      // submits the form, Enter in <select> opens the native dropdown.
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+      className="absolute left-1/2 top-full z-30 mt-1 w-64 -translate-x-1/2 rounded-md border border-neutral-700 bg-neutral-950/95 p-2 text-[0.7rem] shadow-xl backdrop-blur"
+    >
+      <div className="mb-1.5 flex items-center justify-between text-[0.6rem] uppercase tracking-wider text-neutral-500">
+        <span>{dateLabel}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cancel"
+          className="text-neutral-500 hover:text-neutral-300"
+        >
+          ✕
+        </button>
+      </div>
+      {tasks.length > 0 && (
+        <ul className="mb-2 flex max-h-32 flex-col gap-0.5 overflow-y-auto border-b border-neutral-800 pb-2">
+          {tasks.map((t) => (
+            <ExistingTaskRow
+              key={t.id}
+              task={t}
+              section={t.sectionId ? sectionsById.get(t.sectionId) : undefined}
+            />
+          ))}
+        </ul>
+      )}
+      <div className="mb-1 text-[0.6rem] uppercase tracking-wider text-neutral-500">
+        New task
+      </div>
+      <input
+        autoFocus
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Task title"
+        maxLength={200}
+        className="mb-1.5 w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-emerald-500/50 focus:outline-none"
+      />
+      <div className="mb-1.5 flex gap-1.5">
+        <select
+          value={priority}
+          onChange={(e) => setPriority(e.target.value as TaskPriority | '')}
+          required
+          aria-label="Priority (required)"
+          className={`flex-1 rounded border px-1.5 py-1 text-[0.7rem] focus:outline-none ${
+            priority === ''
+              ? 'border-amber-500/40 bg-amber-500/5 text-amber-300'
+              : 'border-neutral-700 bg-neutral-900 text-neutral-200'
+          }`}
+        >
+          <option value="" disabled>
+            Priority…
+          </option>
+          {TASK_PRIORITIES.slice().reverse().map((p) => (
+            <option key={p} value={p}>
+              {capitalize(p)}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sectionId}
+          onChange={(e) => setSectionId(e.target.value)}
+          aria-label="Section"
+          className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-1.5 py-1 text-[0.7rem] text-neutral-200 focus:outline-none"
+        >
+          <option value="">Inbox</option>
+          {sections.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <label className="mb-1.5 flex items-center gap-1.5 text-neutral-400">
+        <input
+          type="checkbox"
+          checked={addEnd}
+          onChange={(e) => setAddEnd(e.target.checked)}
+          className="h-3 w-3 accent-emerald-500"
+        />
+        <span>Add end date</span>
+        {addEnd && (
+          <input
+            type="date"
+            value={endDate}
+            min={ymd}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="ml-auto rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-neutral-200"
+          />
+        )}
+      </label>
+      <div className="flex items-center justify-between">
+        {createMutation.isError && (
+          <span className="text-[0.6rem] text-red-300">
+            {(createMutation.error as Error).message}
+          </span>
+        )}
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="ml-auto rounded border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[0.7rem] font-medium text-emerald-300 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {createMutation.isPending ? 'Adding…' : 'Add'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// -------------------------------------------------------------------
+// ExistingTaskRow — one row inside the composer listing tasks already
+// on the clicked day. Same confirm-then-delete affordance as the
+// /tasks TaskRow (click ✕ → Delete / Cancel) so the UX matches.
+//
+// Local `confirming` state per row; successful delete just invalidates
+// the shared tasks cache — the row disappears on the next render.
+// Composer stays open so the user can delete more or create a new task.
+// -------------------------------------------------------------------
+
+interface ExistingTaskRowProps {
+  task: TaskResponse;
+  section: SectionResponse | undefined;
+}
+
+function ExistingTaskRow({ task, section }: ExistingTaskRowProps) {
+  const qc = useQueryClient();
+  const priorityColors = usePriorityColors();
+  const [confirming, setConfirming] = useState(false);
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteTask(task.id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: tasksQueryKeys.all });
+    },
+  });
+  const completed = task.completedAt !== null;
+  const sectionName = section?.name ?? 'Inbox';
+  return (
+    <li
+      className={`flex items-center gap-1.5 rounded px-1 py-0.5 ${
+        completed ? 'text-neutral-500 line-through' : 'text-neutral-100'
+      }`}
+    >
+      <span
+        aria-hidden
+        className="shrink-0 font-semibold"
+        style={{ color: priorityColors[task.priority] }}
+      >
+        {PRIORITY_GLYPH[task.priority]}
+      </span>
+      <span
+        className="min-w-0 flex-1 truncate"
+        title={`${task.title} · ${sectionName}`}
+      >
+        {task.title}
+      </span>
+      {confirming ? (
+        <>
+          <button
+            type="button"
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending}
+            className="shrink-0 rounded border border-red-500/50 bg-red-500/10 px-1.5 py-0.5 text-[0.6rem] text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+          >
+            {deleteMutation.isPending ? '…' : 'Delete'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            disabled={deleteMutation.isPending}
+            className="shrink-0 rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-[0.6rem] text-neutral-300 hover:bg-neutral-800"
+          >
+            Cancel
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="shrink-0 rounded px-1 py-0.5 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300"
+          aria-label={`Delete "${task.title}"`}
+          title="Delete"
+        >
+          ✕
+        </button>
+      )}
+    </li>
   );
 }
 
