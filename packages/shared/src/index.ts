@@ -241,6 +241,21 @@ export {
 } from './focus-sessions.js';
 
 // ---------------------------------------------------------------------------
+//  Memento Mori — Life Grid (MementoMori.md §6.1 / §7)
+// ---------------------------------------------------------------------------
+export {
+  LIFE_HEATMAP_HOUR_BOUNDARIES,
+  lifeHeatmapTier,
+  lifeGridWeekSchema,
+  lifeGridResponseSchema,
+} from './life.js';
+export type {
+  LifeHeatmapTier,
+  LifeGridWeek,
+  LifeGridResponse,
+} from './life.js';
+
+// ---------------------------------------------------------------------------
 //  Pairing + Devices (Auth.md §5)
 // ---------------------------------------------------------------------------
 export {

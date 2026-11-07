@@ -11,6 +11,7 @@ import { ActivityModule } from './activity/activity.module';
 import { SectionsModule } from './sections/sections.module';
 import { TasksModule } from './tasks/tasks.module';
 import { FocusSessionsModule } from './focus-sessions/focus-sessions.module';
+import { LifeModule } from './life/life.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { FocusSessionsModule } from './focus-sessions/focus-sessions.module';
     SectionsModule,
     TasksModule,
     FocusSessionsModule,
+    LifeModule,
     HealthModule,
   ],
 })
