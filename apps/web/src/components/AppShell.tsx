@@ -96,14 +96,14 @@ function AppHeader() {
             active={location === '/life' || location.startsWith('/life')}
           />
           <NavLink
-            to="/tasks"
-            label="Tasks"
-            active={location === '/tasks' || location.startsWith('/tasks')}
-          />
-          <NavLink
             to="/calendar"
             label="Calendar"
             active={location === '/calendar' || location.startsWith('/calendar')}
+          />
+          <NavLink
+            to="/tasks"
+            label="Tasks"
+            active={location === '/tasks' || location.startsWith('/tasks')}
           />
           <NavLink
             to="/backlog"
