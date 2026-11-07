@@ -31,7 +31,7 @@ export function LifeColorPicker() {
   );
 
   return (
-    <section className="rounded border border-neutral-800 bg-neutral-900/40 p-3 w-56">
+    <section className="rounded border border-neutral-800 bg-neutral-900/40 p-3 w-fit">
       <header className="mb-2 flex items-start justify-between gap-2">
         <h2 className="text-[0.65rem] font-semibold uppercase tracking-widest text-neutral-300">
           Grid colors
@@ -48,14 +48,14 @@ export function LifeColorPicker() {
       </header>
 
       <div
-        className="flex gap-1"
+        className="flex gap-2"
         role="group"
         aria-label="Grid cell colors"
       >
         {ROWS.map(({ role, label, hint }) => (
           <div
             key={role}
-            className="flex min-w-0 flex-1 flex-col items-center gap-1"
+            className="flex flex-col items-center gap-1"
           >
             <span
               className="relative block h-5 w-5 rounded-sm border border-neutral-700 shadow-inner"
