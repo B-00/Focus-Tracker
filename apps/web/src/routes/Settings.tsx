@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { logoutAll as apiLogoutAll } from '../lib/auth-api';
 import { useAuthStore } from '../stores/auth-store';
 import { DevicesSection } from './settings/DevicesSection';
+import { ProfileSection } from './settings/ProfileSection';
 
 // /settings — left-rail tab layout per Settings.md §3.1.
 // Each tab has a kebab-case `#anchor` ID; loading /settings#devices lands
@@ -151,7 +152,7 @@ export function SettingsPage() {
           {activeId === 'devices' ? (
             <DevicesSection />
           ) : activeId === 'profile' ? (
-            <ProfileStub email={email} />
+            <ProfileSection email={email} />
           ) : (
             <StubSection label={activeLabel} />
           )}
@@ -172,23 +173,3 @@ function StubSection({ label }: { label: string }) {
   );
 }
 
-// Partial Profile section — the full form (birthday, lifespan, timezone,
-// password per Settings.md §4.1) lands in a future slice. For now we show
-// the one piece of profile data we actually have hydrated: the account
-// email, moved here from the nav bar.
-function ProfileStub({ email }: { email: string | null }) {
-  return (
-    <div>
-      <h2 className="text-lg font-semibold tracking-tight">Profile</h2>
-      <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-        <dt className="text-neutral-500">Signed in as</dt>
-        <dd className="font-mono text-neutral-200">{email ?? '—'}</dd>
-      </dl>
-      <p className="mt-4 text-xs text-neutral-500">
-        Birthday, lifespan, timezone, and password editing are tracked in{' '}
-        <span className="font-mono text-neutral-400">Settings.md</span> and
-        land in a future slice.
-      </p>
-    </div>
-  );
-}

@@ -34,6 +34,7 @@ export const WIDGET_IDS = [
   'routine_chart',
   'dated_chart',
   'today_activity',
+  'life_strip',
 ] as const;
 export type WidgetId = (typeof WIDGET_IDS)[number];
 
@@ -50,6 +51,7 @@ export const WIDGET_LABELS: Record<WidgetId, string> = {
   routine_chart: 'Routine consistency',
   dated_chart: 'Dated consistency',
   today_activity: "Today's activity",
+  life_strip: 'Life (Memento Mori)',
 };
 
 /// Default order matches the user's preferred "action-first" stack:
@@ -66,6 +68,7 @@ export const DEFAULT_ORDER: readonly WidgetId[] = [
   'routine_chart',
   'dated_chart',
   'today_activity',
+  'life_strip',
 ];
 
 const STORAGE_KEY = 'ft:widget-order:v1';

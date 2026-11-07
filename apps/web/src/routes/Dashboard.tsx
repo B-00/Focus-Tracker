@@ -2,12 +2,14 @@ import type { ComponentType } from 'react';
 import { BacklogIndicatorWidget } from './dashboard/BacklogIndicatorWidget';
 import { DatedChartWidget } from './dashboard/DatedChartWidget';
 import { FocusSessionWidget } from './dashboard/FocusSessionWidget';
+import { LifeStripWidget } from './dashboard/LifeStripWidget';
 import { OngoingTasksWidget } from './dashboard/OngoingTasksWidget';
 import { RoutineChartWidget } from './dashboard/RoutineChartWidget';
 import { TodayActivityWidget } from './dashboard/TodayActivityWidget';
 import { TodayRoutinesWidget } from './dashboard/TodayRoutinesWidget';
 import { TodayTasksWidget } from './dashboard/TodayTasksWidget';
 import {
+  DEFAULT_ORDER,
   resetWidgetOrder,
   useHydrateDashboardPrefs,
   useWidgetOrder,
@@ -37,6 +39,7 @@ const WIDGET_MAP: Record<WidgetId, ComponentType> = {
   routine_chart: RoutineChartWidget,
   dated_chart: DatedChartWidget,
   today_activity: TodayActivityWidget,
+  life_strip: LifeStripWidget,
 };
 
 export function DashboardPage() {
@@ -87,22 +90,13 @@ export function DashboardPage() {
   );
 }
 
-// Cheap identity check: the default order is short enough that a
-// position-by-position scan is less code than a Set diff.
+// Cheap identity check: compare against the authoritative DEFAULT_ORDER
+// constant so adding a widget in widget-order.ts doesn't silently
+// de-sync this file.
 function isDefaultOrder(order: readonly WidgetId[]): boolean {
-  const defaultIds: WidgetId[] = [
-    'focus_session',
-    'today_tasks',
-    'today_routines',
-    'ongoing_tasks',
-    'backlog',
-    'routine_chart',
-    'dated_chart',
-    'today_activity',
-  ];
-  if (order.length !== defaultIds.length) return false;
+  if (order.length !== DEFAULT_ORDER.length) return false;
   for (let i = 0; i < order.length; i++) {
-    if (order[i] !== defaultIds[i]) return false;
+    if (order[i] !== DEFAULT_ORDER[i]) return false;
   }
   return true;
 }

@@ -107,6 +107,11 @@ function AppHeader() {
             active={location === '/activity' || location.startsWith('/activity')}
           />
           <NavLink
+            to="/life"
+            label="Life"
+            active={location === '/life' || location.startsWith('/life')}
+          />
+          <NavLink
             to="/settings"
             label="Settings"
             active={location === '/settings' || location.startsWith('/settings')}
@@ -129,7 +134,7 @@ function AppHeader() {
 }
 
 interface NavLinkProps {
-  to: '/' | '/tasks' | '/backlog' | '/focus' | '/activity' | '/settings';
+  to: '/' | '/tasks' | '/backlog' | '/focus' | '/activity' | '/life' | '/settings';
   label: string;
   active: boolean;
   /// Optional count pill next to the label. Hidden when undefined / 0.
