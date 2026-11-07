@@ -17,6 +17,7 @@ import {
   lifeWeekQueryKeys,
   upsertLifeWeekNote,
 } from '../../lib/life-week-api';
+import { MilestonesSection } from './MilestonesSection';
 
 // Per-week detail modal (MementoMori.md §5.1 past-week drawer /
 // §5.2 current-week read-only variant).
@@ -111,6 +112,10 @@ function WeekBody({ detail }: { detail: LifeWeekDetail }) {
         <TopList label="Top apps" items={detail.topApps} emptyLabel="No desktop activity" />
         <TopList label="Top sites" items={detail.topSites} emptyLabel="No browser activity" />
       </div>
+      <MilestonesSection
+        weekIndex={detail.weekIndex}
+        weekStartDate={detail.startDate}
+      />
       <NoteEditor detail={detail} />
     </div>
   );

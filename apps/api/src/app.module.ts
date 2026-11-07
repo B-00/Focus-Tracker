@@ -12,6 +12,7 @@ import { SectionsModule } from './sections/sections.module';
 import { TasksModule } from './tasks/tasks.module';
 import { FocusSessionsModule } from './focus-sessions/focus-sessions.module';
 import { LifeModule } from './life/life.module';
+import { MilestonesModule } from './milestones/milestones.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { LifeModule } from './life/life.module';
     TasksModule,
     FocusSessionsModule,
     LifeModule,
+    MilestonesModule,
     HealthModule,
   ],
 })

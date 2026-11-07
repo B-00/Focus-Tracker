@@ -264,6 +264,28 @@ export type {
 } from './life.js';
 
 // ---------------------------------------------------------------------------
+//  Memento Mori — Milestones (MementoMori.md §3.4 / §4.4 / §5.3 / §7)
+// ---------------------------------------------------------------------------
+export {
+  MILESTONE_LABEL_MAX,
+  MILESTONE_ICON_MAX,
+  HEX_COLOR_REGEX,
+  YMD_REGEX,
+  milestoneSchema,
+  milestoneListResponseSchema,
+  createMilestoneRequestSchema,
+  updateMilestoneRequestSchema,
+  MILESTONE_ERROR_CODES,
+} from './milestones.js';
+export type {
+  Milestone,
+  MilestoneListResponse,
+  CreateMilestoneRequest,
+  UpdateMilestoneRequest,
+  MilestoneErrorCode,
+} from './milestones.js';
+
+// ---------------------------------------------------------------------------
 //  Pairing + Devices (Auth.md §5)
 // ---------------------------------------------------------------------------
 export {

@@ -19,6 +19,10 @@ import { LifeColorPicker } from './life/LifeColorPicker';
 import { LifeSizePicker } from './life/LifeSizePicker';
 import { LifeHeatmapColorPicker } from './life/LifeHeatmapColorPicker';
 import { LifeWeekModal } from './life/LifeWeekModal';
+import { LifeWeekFutureModal } from './life/LifeWeekFutureModal';
+import { fetchMilestones, milestoneQueryKeys } from '../lib/milestones-api';
+import { iconFor } from './life/MilestonesSection';
+import type { Milestone } from '@focus-tracker/shared';
 
 // /life — Memento Mori life calendar (MementoMori.md §3.1).
 //
@@ -177,18 +181,38 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
   }, []);
   const onGridLeave = useCallback(() => setHover(null), []);
 
-  // Click-to-open-week modal state (MementoMori.md §5.1 / §5.2). Only
-  // past or current cells open — future cells are reserved for Slice 4
-  // (milestone popover, §5.3). Click handler is useCallback'd so the
+  // Click-to-open-week modal state. All cells are activatable now
+  // (MementoMori.md §5.1 past, §5.2 current, §5.3 future). A single
+  // openWeekIndex drives either the past/current drawer or the
+  // future-week milestones modal depending on where the week sits
+  // relative to the current week. Handlers are useCallback'd so the
   // memo'd DecadeRow / HalfGrid subtrees don't re-render on each open.
   const [openWeekIndex, setOpenWeekIndex] = useState<number | null>(null);
   const onCellActivate = useCallback<HalfGridCellActivate>(
-    (idx) => {
-      if (idx <= current) setOpenWeekIndex(idx);
-    },
-    [current],
+    (idx) => setOpenWeekIndex(idx),
+    [],
   );
   const onCloseWeek = useCallback(() => setOpenWeekIndex(null), []);
+  const openIsFuture = openWeekIndex !== null && openWeekIndex > current;
+  const openIsPastOrCurrent = openWeekIndex !== null && openWeekIndex <= current;
+
+  // Milestones: single query, bin by weekIndex so each HalfGrid can
+  // look up its week's markers in O(1). The query is enabled always
+  // (not gated on grid data) so markers paint as soon as they load.
+  const milestonesQuery = useQuery({
+    queryKey: milestoneQueryKeys.list(),
+    queryFn: fetchMilestones,
+    staleTime: 60_000,
+  });
+  const milestonesByWeek = useMemo<ReadonlyMap<number, Milestone[]>>(() => {
+    const m = new Map<number, Milestone[]>();
+    for (const row of milestonesQuery.data ?? []) {
+      const bucket = m.get(row.weekIndex);
+      if (bucket) bucket.push(row);
+      else m.set(row.weekIndex, [row]);
+    }
+    return m;
+  }, [milestonesQuery.data]);
 
   // Chunk the years into decade blocks. Last block may be short if
   // lifeExpectancyYears isn't a multiple of 10 (e.g. 85 → 8 full + 1 half).
@@ -283,6 +307,7 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
                   yearsInDecade={yearsInDecade}
                   currentWeekIndex={current}
                   gridData={gridData}
+                  milestonesByWeek={milestonesByWeek}
                   onCellHover={onCellHover}
                   onCellActivate={onCellActivate}
                 />
@@ -315,10 +340,19 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
           currentWeekIndex={current}
           preset={size.tooltip}
           payload={gridData.get(hover.idx) ?? null}
+          milestones={milestonesByWeek.get(hover.idx) ?? null}
         />
       )}
 
-      <LifeWeekModal weekIndex={openWeekIndex} onClose={onCloseWeek} />
+      <LifeWeekModal
+        weekIndex={openIsPastOrCurrent ? openWeekIndex : null}
+        onClose={onCloseWeek}
+      />
+      <LifeWeekFutureModal
+        weekIndex={openIsFuture ? openWeekIndex : null}
+        birthday={grid?.birthday ?? birthday.toISOString().slice(0, 10)}
+        onClose={onCloseWeek}
+      />
     </main>
   );
 }
@@ -454,11 +488,14 @@ type HalfGridCellHover = (idx: number, rect: HoverRect) => void;
 /// Click / Enter / Space activation — opens the per-week detail modal.
 type HalfGridCellActivate = (idx: number) => void;
 
+type MilestonesByWeek = ReadonlyMap<number, Milestone[]>;
+
 interface DecadeRowProps {
   startYear: number;
   yearsInDecade: number;
   currentWeekIndex: number;
   gridData: GridDataMap;
+  milestonesByWeek: MilestonesByWeek;
   onCellHover: HalfGridCellHover;
   onCellActivate: HalfGridCellActivate;
 }
@@ -468,6 +505,7 @@ const DecadeRow = memo(function DecadeRow({
   yearsInDecade,
   currentWeekIndex,
   gridData,
+  milestonesByWeek,
   onCellHover,
   onCellActivate,
 }: DecadeRowProps) {
@@ -480,6 +518,7 @@ const DecadeRow = memo(function DecadeRow({
         weekCount={HALF_WEEKS}
         currentWeekIndex={currentWeekIndex}
         gridData={gridData}
+        milestonesByWeek={milestonesByWeek}
         onCellHover={onCellHover}
         onCellActivate={onCellActivate}
       />
@@ -490,6 +529,7 @@ const DecadeRow = memo(function DecadeRow({
         weekCount={HALF_WEEKS}
         currentWeekIndex={currentWeekIndex}
         gridData={gridData}
+        milestonesByWeek={milestonesByWeek}
         onCellHover={onCellHover}
         onCellActivate={onCellActivate}
       />
@@ -504,6 +544,7 @@ interface HalfGridProps {
   weekCount: number;   // 26
   currentWeekIndex: number;
   gridData: GridDataMap;
+  milestonesByWeek: MilestonesByWeek;
   onCellHover: HalfGridCellHover;
   onCellActivate: HalfGridCellActivate;
 }
@@ -515,6 +556,7 @@ const HalfGrid = memo(function HalfGrid({
   weekCount,
   currentWeekIndex,
   gridData,
+  milestonesByWeek,
   onCellHover,
   onCellActivate,
 }: HalfGridProps) {
@@ -571,30 +613,75 @@ const HalfGrid = memo(function HalfGrid({
         const isPast = idx < currentWeekIndex;
         const payload = isPast ? gridData.get(idx) : undefined;
         const bg = resolveCellBg(isCurrent, isPast, payload);
-        // Past + current cells are activatable (open the per-week
-        // modal). Future cells are inert in Slice 3 — milestone
-        // popover (§5.3) is Slice 4 territory.
-        const activatable = isPast || isCurrent;
+        // All cells are activatable (past → detail drawer, current →
+        // detail drawer, future → milestone modal). See MementoMori.md
+        // §5.1 / §5.2 / §5.3.
+        const weekMilestones = milestonesByWeek.get(idx);
         return (
           <div
             key={idx}
             role="gridcell"
-            aria-label={cellAriaLabel(year, week, isCurrent, payload)}
-            tabIndex={activatable ? 0 : -1}
+            aria-label={cellAriaLabel(year, week, isCurrent, payload, weekMilestones)}
+            tabIndex={0}
             onMouseEnter={handleEnter(idx)}
-            onClick={activatable ? handleClick(idx) : undefined}
-            onKeyDown={activatable ? handleKey(idx) : undefined}
-            className={`${
+            onClick={handleClick(idx)}
+            onKeyDown={handleKey(idx)}
+            className={`relative cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-300/70 ${
               isCurrent
                 ? 'rounded-[1px] ring-1 ring-emerald-200 shadow-[0_0_6px_rgba(52,211,153,0.6)]'
                 : isPast
                   ? 'rounded-[1px]'
                   : 'rounded-[1px] border border-neutral-800'
-            }${activatable ? ' cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-300/70' : ''}`}
+            }`}
             style={{ backgroundColor: bg }}
-          />
+          >
+            {weekMilestones && weekMilestones.length > 0 && (
+              <MilestoneMarker milestones={weekMilestones} />
+            )}
+          </div>
         );
       })}
+    </div>
+  );
+});
+
+// ---------------------------------------------------------------------------
+//  MilestoneMarker — corner overlay rendered on top of each cell
+//  (MementoMori.md §4.4). Up to 3 stacked icons; "+N" pill beyond that.
+//  pointer-events-none so the cell's click target remains the parent.
+// ---------------------------------------------------------------------------
+
+const MilestoneMarker = memo(function MilestoneMarker({
+  milestones,
+}: {
+  milestones: Milestone[];
+}) {
+  const visible = milestones.slice(0, 3);
+  const extra = milestones.length - visible.length;
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute -right-0.5 -top-0.5 flex items-center gap-px"
+    >
+      {visible.map((m) => {
+        const Icon = iconFor(m.icon);
+        return (
+          <span
+            key={m.id}
+            className="flex h-2.5 w-2.5 items-center justify-center rounded-full ring-1 ring-black/40"
+            style={{ backgroundColor: m.color }}
+          >
+            <Icon size={6} className="text-black/70" strokeWidth={3} />
+          </span>
+        );
+      })}
+      {extra > 0 && (
+        <span
+          className="flex min-w-[0.7rem] items-center justify-center rounded-full bg-neutral-200 px-0.5 text-[0.45rem] font-semibold text-neutral-900 ring-1 ring-black/40"
+        >
+          +{extra}
+        </span>
+      )}
     </div>
   );
 });
@@ -617,11 +704,15 @@ function cellAriaLabel(
   week: number,
   isCurrent: boolean,
   payload: WeekPayload | undefined,
+  milestones: Milestone[] | undefined,
 ): string {
-  const base = `Year ${year + 1}, week ${week + 1}`;
-  if (isCurrent) return `${base} (current)`;
-  if (!payload) return base;
-  return `${base}, ${payload.minutes} active min`;
+  const parts: string[] = [`Year ${year + 1}, week ${week + 1}`];
+  if (isCurrent) parts.push('(current)');
+  if (payload) parts.push(`${payload.minutes} active min`);
+  if (milestones && milestones.length > 0) {
+    parts.push(`${milestones.length} milestone${milestones.length === 1 ? '' : 's'}: ${milestones.map((m) => m.label).join(', ')}`);
+  }
+  return parts.join(', ');
 }
 
 // ---------------------------------------------------------------------------
@@ -660,6 +751,7 @@ interface CellTooltipProps {
   currentWeekIndex: number;
   preset: CellTooltipPreset;
   payload: WeekPayload | null;
+  milestones: Milestone[] | null;
 }
 
 function CellTooltip({
@@ -669,6 +761,7 @@ function CellTooltip({
   currentWeekIndex,
   preset,
   payload,
+  milestones,
 }: CellTooltipProps) {
   const year = Math.floor(idx / WEEKS_PER_YEAR);
   const weekInYear = idx % WEEKS_PER_YEAR;
@@ -743,6 +836,24 @@ function CellTooltip({
         >
           {activityLabel}
         </p>
+      )}
+      {milestones && milestones.length > 0 && (
+        <ul className="mt-1 flex flex-col gap-0.5">
+          {milestones.map((m) => (
+            <li
+              key={m.id}
+              className="flex items-center gap-1 text-neutral-200"
+              style={{ fontSize: preset.detailFont }}
+            >
+              <span
+                className="inline-block h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: m.color }}
+                aria-hidden
+              />
+              <span className="truncate">{m.label}</span>
+            </li>
+          ))}
+        </ul>
       )}
       <p
         className="mt-0.5 text-neutral-500"
