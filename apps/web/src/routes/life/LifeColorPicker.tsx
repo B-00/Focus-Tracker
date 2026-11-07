@@ -55,7 +55,11 @@ export function LifeColorPicker() {
         {ROWS.map(({ role, label, hint }) => (
           <div
             key={role}
-            className="flex flex-col items-center gap-1"
+            // Fixed item width so every swatch sits the same distance
+            // from its neighbours regardless of label length — the
+            // natural-width approach was pushing "This week" (wider
+            // label) further from "Lived" than from "Remaining".
+            className="flex w-16 flex-col items-center gap-1"
           >
             <span
               className="relative block h-5 w-5 rounded-sm border border-neutral-700 shadow-inner"

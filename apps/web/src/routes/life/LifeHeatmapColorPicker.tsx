@@ -62,7 +62,10 @@ export function LifeHeatmapColorPicker() {
           return (
             <div
               key={role}
-              className="flex flex-col items-center gap-1"
+              // Fixed item width so all four swatches align with
+              // identical spacing (see LifeColorPicker for the same
+              // trade-off).
+              className="flex w-14 flex-col items-center gap-1"
             >
               <span
                 className="relative block h-5 w-5 rounded-sm border border-neutral-700 shadow-inner"
