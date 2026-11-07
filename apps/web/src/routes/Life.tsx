@@ -229,7 +229,7 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
           it sits left-aligned above the first row of cells per the
           user's layout call. */}
       <div className="mx-auto w-fit" onMouseLeave={onGridLeave}>
-        <p className="mb-2 text-sm text-neutral-400">
+        <p className="mb-2 text-base text-neutral-400">
           {stats.currentWeekIndex < 0 ? (
             'Grid starts on your birthday.'
           ) : stats.currentWeekIndex >= totalWeeks ? (
@@ -573,7 +573,11 @@ function cellAriaLabel(
 //  active LifeSize preset so the tooltip stays proportionate to the grid.
 // ---------------------------------------------------------------------------
 
-const TOOLTIP_GAP = 8;    // gap between cell edge and tooltip
+// Gap between cell edge and the tooltip body. Needs to clear the OS
+// cursor glyph (usually 20–30px) so the tooltip doesn't sit on top of
+// the arrow. 40px lands the tooltip a comfortable distance above the
+// hovered cell on every size preset.
+const TOOLTIP_GAP = 40;
 
 const DATE_FMT = new Intl.DateTimeFormat(undefined, {
   month: 'short',
@@ -628,22 +632,26 @@ function CellTooltip({
       : 'no activity'
     : null;
 
-  // Anchor above the cell; clamp to viewport so edges don't cut off.
+  // Horizontal: center over the cell; clamp to viewport so edges
+  // don't cut off.
   const anchorX = rect.left + rect.width / 2;
-  const anchorY = rect.top;
   let left = anchorX - preset.w / 2;
   left = Math.max(8, Math.min(window.innerWidth - preset.w - 8, left));
-  let top = anchorY - TOOLTIP_GAP - preset.h;
-  if (top < 8) {
-    // Flip below the cell if there's no room above.
-    top = anchorY + rect.height + TOOLTIP_GAP;
-  }
+
+  // Vertical: prefer above the cell. Anchor the tooltip's *bottom*
+  // edge via translateY(-100%) so TOOLTIP_GAP is exact regardless of
+  // the tooltip's actual content height — preset.h is only used to
+  // decide whether we have viewport room above, not to position.
+  const topIfAbove = rect.top - TOOLTIP_GAP - preset.h;
+  const above = topIfAbove >= 8;
+  const top = above ? rect.top - TOOLTIP_GAP : rect.top + rect.height + TOOLTIP_GAP;
+  const transform = above ? 'translateY(-100%)' : 'none';
 
   return (
     <div
       role="tooltip"
       className="pointer-events-none fixed z-50 rounded-md border border-neutral-700 bg-neutral-900/95 shadow-lg backdrop-blur"
-      style={{ left, top, width: preset.w, padding: preset.pad }}
+      style={{ left, top, width: preset.w, padding: preset.pad, transform }}
     >
       <p
         className="uppercase tracking-wider text-neutral-500"
