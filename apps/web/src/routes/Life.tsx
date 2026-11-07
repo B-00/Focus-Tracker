@@ -14,9 +14,9 @@ import { fetchLifeGrid, lifeQueryKeys } from '../lib/life-api';
 import { computeLifeStats, parseBirthday, weekRange } from '../lib/life-math';
 import { useLifeColors } from '../lib/life-colors';
 import { LIFE_SIZE_PRESETS, useLifeSize } from '../lib/life-size';
-import { LIFE_HEATMAP_LABELS, LIFE_HEATMAP_RAMP } from '../lib/life-heatmap';
 import { LifeColorPicker } from './life/LifeColorPicker';
 import { LifeSizePicker } from './life/LifeSizePicker';
+import { LifeHeatmapColorPicker } from './life/LifeHeatmapColorPicker';
 
 // /life — Memento Mori life calendar (MementoMori.md §3.1).
 //
@@ -33,12 +33,10 @@ import { LifeSizePicker } from './life/LifeSizePicker';
 // are React.memo'd on their index-only props so the ancestor style
 // change doesn't cascade into the subtree.
 //
-// Slice 2 (§4.2): past cells with data are shaded by telemetry-minutes
-// heatmap tiers (LIFE_HEATMAP_RAMP) and get a small corner dot overlay
-// when the week contained any completed Focus Sessions. `gridData` and
-// `trackingStartWeekIndex` are additional memo'd props — when fresh
-// grid data arrives the subtree re-renders *once*; subsequent picker
-// drags still hit the CSS-var fast path.
+// Slice 2.1 (§4.2 revised): past cells with data are shaded by 4
+// telemetry-minute tiers (user-pickable via LifeHeatmapColorPicker).
+// Focus-session overlay was removed; "pre-tracking" and "measured idle"
+// collapse into a single empty state using --c-lived.
 
 const WEEKS_PER_YEAR = 52;
 const HALF_WEEKS = 26;       // first half: weeks 1..26; second half: weeks 27..52
@@ -131,8 +129,7 @@ interface GridProps {
 /// re-compute it on every render.
 interface WeekPayload {
   minutes: number;
-  hasSessions: boolean;
-  tier: 0 | 1 | 2 | 3 | 4 | 5;
+  tier: 0 | 1 | 2 | 3 | 4;
 }
 
 type GridDataMap = ReadonlyMap<number, WeekPayload>;
@@ -160,14 +157,11 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
     for (const w of grid.weeks) {
       m.set(w.weekIndex, {
         minutes: w.telemetryMinutes,
-        hasSessions: w.hasSessions,
         tier: lifeHeatmapTier(w.telemetryMinutes),
       });
     }
     return m;
   }, [grid]);
-
-  const trackingStart = grid?.trackingStartWeekIndex ?? null;
 
   // ---- Hover tooltip state. See HourlyBreakdown.tsx for the inspiration
   // pattern. Stored at this level so the tooltip component is a sibling
@@ -194,30 +188,24 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
     return out;
   }, [lifeExpectancyYears]);
 
-  // ponytail (perf): publish 3 colors + 5 size dimensions + the hardcoded
-  // heatmap ramp as CSS vars. Cells + axis strips reference them via
+  // ponytail (perf): publish 3 grid roles + 4 heatmap roles + 5 size
+  // dimensions as CSS vars. Cells + axis strips reference them via
   // var(...) so a picker change is a single style update on <main> and a
   // browser repaint — not a React re-render of the ~5000 cell subtree.
-  // Overlay dot size derives from --cell via calc(), so it scales with
-  // the active size preset automatically.
   const cssVars = {
     '--c-lived': colors.lived,
     '--c-this': colors.thisWeek,
     '--c-rem': colors.remaining,
-    '--c-h0': LIFE_HEATMAP_RAMP[0],
-    '--c-h1': LIFE_HEATMAP_RAMP[1],
-    '--c-h2': LIFE_HEATMAP_RAMP[2],
-    '--c-h3': LIFE_HEATMAP_RAMP[3],
-    '--c-h4': LIFE_HEATMAP_RAMP[4],
-    '--c-h5': LIFE_HEATMAP_RAMP[5],
+    '--c-h1': colors.h1,
+    '--c-h2': colors.h2,
+    '--c-h3': colors.h3,
+    '--c-h4': colors.h4,
     '--cell': `${size.cell}px`,
     '--cell-gap': `${size.gap}px`,
     '--block-gap': `${size.blockGap}px`,
     '--axis-font': size.axisFont,
     '--year-axis-w': `${size.axisW}px`,
     '--week-axis-h': `${size.axisH}px`,
-    // Overlay dot: ~1/3 cell size, min 2px so it stays visible on S.
-    '--overlay-dot': `max(2px, calc(var(--cell) / 3))`,
   } as CSSProperties;
 
   return (
@@ -257,6 +245,13 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
         </div>
       </header>
 
+      {/* Heatmap color picker doubles as the activity legend. Lives
+          between the header and the grid, left-aligned within the main
+          container per the Slice 2.1 layout call. */}
+      <div className="mb-4">
+        <LifeHeatmapColorPicker />
+      </div>
+
       {/* No overflow wrapper — the page's own scroll handles any grid
           wider than the viewport. Nested overflow-x: auto forces
           overflow-y to auto per CSS spec and that's the internal
@@ -275,7 +270,6 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
                   yearsInDecade={yearsInDecade}
                   currentWeekIndex={current}
                   gridData={gridData}
-                  trackingStart={trackingStart}
                   onCellHover={onCellHover}
                 />
               ))}
@@ -283,8 +277,6 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
           </div>
         </div>
       </div>
-
-      <HeatmapLegend />
 
       {hover && (
         <CellTooltip
@@ -294,7 +286,6 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
           currentWeekIndex={current}
           preset={size.tooltip}
           payload={gridData.get(hover.idx) ?? null}
-          trackingStart={trackingStart}
         />
       )}
     </main>
@@ -435,7 +426,6 @@ interface DecadeRowProps {
   yearsInDecade: number;
   currentWeekIndex: number;
   gridData: GridDataMap;
-  trackingStart: number | null;
   onCellHover: HalfGridCellHover;
 }
 
@@ -444,7 +434,6 @@ const DecadeRow = memo(function DecadeRow({
   yearsInDecade,
   currentWeekIndex,
   gridData,
-  trackingStart,
   onCellHover,
 }: DecadeRowProps) {
   return (
@@ -456,7 +445,6 @@ const DecadeRow = memo(function DecadeRow({
         weekCount={HALF_WEEKS}
         currentWeekIndex={currentWeekIndex}
         gridData={gridData}
-        trackingStart={trackingStart}
         onCellHover={onCellHover}
       />
       <HalfGrid
@@ -466,7 +454,6 @@ const DecadeRow = memo(function DecadeRow({
         weekCount={HALF_WEEKS}
         currentWeekIndex={currentWeekIndex}
         gridData={gridData}
-        trackingStart={trackingStart}
         onCellHover={onCellHover}
       />
     </div>
@@ -480,7 +467,6 @@ interface HalfGridProps {
   weekCount: number;   // 26
   currentWeekIndex: number;
   gridData: GridDataMap;
-  trackingStart: number | null;
   onCellHover: HalfGridCellHover;
 }
 
@@ -491,7 +477,6 @@ const HalfGrid = memo(function HalfGrid({
   weekCount,
   currentWeekIndex,
   gridData,
-  trackingStart,
   onCellHover,
 }: HalfGridProps) {
   // Default grid-auto-flow is 'row' — iterate year (row) first, then week
@@ -538,11 +523,7 @@ const HalfGrid = memo(function HalfGrid({
         const isCurrent = idx === currentWeekIndex;
         const isPast = idx < currentWeekIndex;
         const payload = isPast ? gridData.get(idx) : undefined;
-        const bg = resolveCellBg(isCurrent, isPast, payload, trackingStart, idx);
-        // Session overlay — only on past cells that had completed
-        // sessions. Skip the current cell (its emerald glow already
-        // signals "active week") to avoid double visual weight.
-        const showOverlay = isPast && payload?.hasSessions === true;
+        const bg = resolveCellBg(isCurrent, isPast, payload);
         return (
           <div
             key={idx}
@@ -550,66 +531,31 @@ const HalfGrid = memo(function HalfGrid({
             aria-label={cellAriaLabel(year, week, isCurrent, payload)}
             onMouseEnter={handleEnter(idx)}
             className={
-              'relative ' +
-              (isCurrent
+              isCurrent
                 ? 'rounded-[1px] ring-1 ring-emerald-200 shadow-[0_0_6px_rgba(52,211,153,0.6)]'
                 : isPast
                   ? 'rounded-[1px]'
-                  : 'rounded-[1px] border border-neutral-800')
+                  : 'rounded-[1px] border border-neutral-800'
             }
             style={{ backgroundColor: bg }}
-          >
-            {showOverlay && <SessionOverlayDot />}
-          </div>
+          />
         );
       })}
     </div>
   );
 });
 
-/// Small square-ish dot in the top-right corner of a cell. Size scales
-/// with --cell via the --overlay-dot CSS var published by <LifeGrid>.
-/// Uses the user's `--c-this` color so it reads as "focus-session color"
-/// (same palette slot the current-week cell uses). pointer-events none so
-/// hover state falls through to the parent cell.
-function SessionOverlayDot() {
-  return (
-    <span
-      aria-hidden="true"
-      className="pointer-events-none absolute right-0 top-0 rounded-full"
-      style={{
-        width: 'var(--overlay-dot)',
-        height: 'var(--overlay-dot)',
-        backgroundColor: 'var(--c-this)',
-        // Slight white outline keeps the dot visible on the brightest
-        // tier-5 cell too (where --c-this ≈ heatmap[5] by default).
-        boxShadow: '0 0 0 1px rgba(10, 10, 10, 0.6)',
-      }}
-    />
-  );
-}
-
 function resolveCellBg(
   isCurrent: boolean,
   isPast: boolean,
   payload: WeekPayload | undefined,
-  trackingStart: number | null,
-  idx: number,
 ): string {
   if (isCurrent) return 'var(--c-this)';
   if (!isPast) return 'var(--c-rem)';
-  // Past cell: three sub-cases per spec §4.2.
-  if (payload) return heatmapCssVar(payload.tier);
-  // No row for this past week. Either pre-tracking (unmeasured) or
-  // measured-but-idle depending on whether the user has ever paired a
-  // source. `trackingStart == null` means no telemetry at all yet →
-  // everything is unmeasured.
-  if (trackingStart === null || idx < trackingStart) return 'var(--c-lived)';
-  return 'var(--c-h0)';
-}
-
-function heatmapCssVar(tier: 0 | 1 | 2 | 3 | 4 | 5): string {
-  return `var(--c-h${tier})`;
+  // Past cell. Empty (no row) OR measured-idle (tier 0) both read as
+  // --c-lived — unified empty state per Slice 2.1.
+  if (!payload || payload.tier === 0) return 'var(--c-lived)';
+  return `var(--c-h${payload.tier})`;
 }
 
 function cellAriaLabel(
@@ -621,53 +567,7 @@ function cellAriaLabel(
   const base = `Year ${year + 1}, week ${week + 1}`;
   if (isCurrent) return `${base} (current)`;
   if (!payload) return base;
-  const parts = [base, `${payload.minutes} active min`];
-  if (payload.hasSessions) parts.push('focus session');
-  return parts.join(', ');
-}
-
-// ---------------------------------------------------------------------------
-//  Legend — compact heatmap ramp + overlay explainer below the grid.
-// ---------------------------------------------------------------------------
-
-function HeatmapLegend() {
-  return (
-    <div className="mx-auto mt-6 flex w-fit flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[0.7rem] text-neutral-500">
-      <div className="flex items-center gap-2">
-        <span className="uppercase tracking-wider">activity</span>
-        <span className="text-neutral-600" aria-hidden="true">less</span>
-        <div className="flex items-center gap-[2px]" role="list" aria-label="Heatmap tiers">
-          {([0, 1, 2, 3, 4, 5] as const).map((tier) => (
-            <span
-              key={tier}
-              role="listitem"
-              title={LIFE_HEATMAP_LABELS[tier]}
-              className="inline-block h-3 w-3 rounded-[1px]"
-              style={{ backgroundColor: heatmapCssVar(tier) }}
-            />
-          ))}
-        </div>
-        <span className="text-neutral-600" aria-hidden="true">more</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="relative inline-block h-3 w-3 rounded-[1px] bg-neutral-800">
-          <span
-            aria-hidden="true"
-            className="absolute right-0 top-0 h-1.5 w-1.5 rounded-full"
-            style={{ backgroundColor: 'var(--c-this)' }}
-          />
-        </span>
-        <span>focus session this week</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span
-          className="inline-block h-3 w-3 rounded-[1px]"
-          style={{ backgroundColor: 'var(--c-lived)' }}
-        />
-        <span>before tracking</span>
-      </div>
-    </div>
-  );
+  return `${base}, ${payload.minutes} active min`;
 }
 
 // ---------------------------------------------------------------------------
@@ -675,9 +575,7 @@ function HeatmapLegend() {
 //  Anchored to the hovered cell via position: fixed + the client rect
 //  grabbed on mouseEnter. Clamped to the viewport so right/bottom-edge
 //  cells don't push the tooltip off-screen. Dimensions scale with the
-//  active LifeSize preset so the tooltip stays proportionate to the
-//  grid (a 192px tooltip over 20px XL cells looks cramped; an 8px S
-//  cell over a 272px tooltip looks silly).
+//  active LifeSize preset so the tooltip stays proportionate to the grid.
 // ---------------------------------------------------------------------------
 
 const TOOLTIP_GAP = 8;    // gap between cell edge and tooltip
@@ -704,7 +602,6 @@ interface CellTooltipProps {
   currentWeekIndex: number;
   preset: CellTooltipPreset;
   payload: WeekPayload | null;
-  trackingStart: number | null;
 }
 
 function CellTooltip({
@@ -714,7 +611,6 @@ function CellTooltip({
   currentWeekIndex,
   preset,
   payload,
-  trackingStart,
 }: CellTooltipProps) {
   const year = Math.floor(idx / WEEKS_PER_YEAR);
   const weekInYear = idx % WEEKS_PER_YEAR;
@@ -728,20 +624,14 @@ function CellTooltip({
   const relLabel =
     delta === 0 ? 'this week' : delta < 0 ? `${-delta} weeks ago` : `in ${delta} weeks`;
 
-  // Activity line — only meaningful for past weeks. For future / current
-  // cells we skip it (the "this week" label already carries the story).
+  // Activity line — only meaningful for past weeks. "no activity"
+  // covers both pre-tracking and measured-idle (unified visually too).
   const isPast = idx < currentWeekIndex;
-  let activityLabel: string | null = null;
-  if (isPast) {
-    if (payload) {
-      activityLabel = formatActivity(payload.minutes);
-    } else if (trackingStart !== null && idx >= trackingStart) {
-      activityLabel = 'no activity';
-    } else {
-      activityLabel = 'before tracking';
-    }
-  }
-  const sessionLabel = payload?.hasSessions === true ? '· focus session' : null;
+  const activityLabel = isPast
+    ? payload
+      ? formatActivity(payload.minutes)
+      : 'no activity'
+    : null;
 
   // Anchor above the cell; clamp to viewport so edges don't cut off.
   const anchorX = rect.left + rect.width / 2;
@@ -790,7 +680,6 @@ function CellTooltip({
           style={{ fontSize: preset.detailFont }}
         >
           {activityLabel}
-          {sessionLabel && <span className="text-emerald-300"> {sessionLabel}</span>}
         </p>
       )}
       <p

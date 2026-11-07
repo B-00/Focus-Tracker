@@ -5,13 +5,13 @@ import { PrismaService } from '../prisma/prisma.service';
 
 // Memento Mori life-grid service.
 //
-// Owner: MementoMori.md §4.2 (base + overlay layers) + §6.1 / §6.2.
+// Owner: MementoMori.md §4.2 (base layer) + §6.1 / §6.2.
 //
 // Two things:
 //   * refreshForUser()  — recomputes `week_activity_minutes` rows for a
-//     single user, union of telemetry weeks + completed-session weeks.
-//     Single raw UPSERT. Called from LifeScheduler (bootstrap + daily)
-//     and from the on-read current-week refresh in the controller.
+//     single user from `activity_minute_rollup`. Single raw UPSERT.
+//     Called from LifeScheduler (bootstrap + daily) and from the on-
+//     read current-week refresh in getGrid().
 //   * getGrid()         — returns the full LifeGridResponse for a user.
 //
 // MS_PER_WEEK = 7 * 24 * 3600 = 604_800 (seconds). Used inside the SQL
@@ -22,6 +22,12 @@ import { PrismaService } from '../prisma/prisma.service';
 // drift, §10). No tz juggling because the index is tz-agnostic — only
 // "today" depends on the user's local clock, and that's computed in
 // `getGrid()` from the current server UTC time + the stored birthday.
+//
+// The focus-session overlay from the initial Slice 2 was removed in
+// Slice 2.1 per the user's call. We still write `hasSessions = false`
+// into the (NOT NULL) column so the existing migration keeps working;
+// downstream readers / later surfaces may revive the overlay by
+// reintroducing the previous session_weeks CTE.
 
 const MS_PER_WEEK = 7 * 24 * 3600 * 1000;
 const SEC_PER_WEEK = 7 * 24 * 3600;
@@ -60,7 +66,6 @@ export class LifeService {
         birthday: '',
         lifeExpectancyYears: user.lifeExpectancyYears,
         currentWeekIndex: -1,
-        trackingStartWeekIndex: null,
         weeks: [],
       };
     }
@@ -86,26 +91,21 @@ export class LifeService {
       }
     }
 
-    const [rows, trackingStart] = await Promise.all([
-      this.prisma.weekActivityMinutes.findMany({
-        where: { userId },
-        orderBy: { weekIndex: 'asc' },
-        select: { weekIndex: true, totalMinutes: true, hasSessions: true },
-      }),
-      this.resolveTrackingStartWeekIndex(userId, birthdayMs),
-    ]);
+    const rows = await this.prisma.weekActivityMinutes.findMany({
+      where: { userId },
+      orderBy: { weekIndex: 'asc' },
+      select: { weekIndex: true, totalMinutes: true },
+    });
 
     const weeks: LifeGridWeek[] = rows.map((r) => ({
       weekIndex: r.weekIndex,
       telemetryMinutes: r.totalMinutes,
-      hasSessions: r.hasSessions,
     }));
 
     return {
       birthday: user.birthday.toISOString().slice(0, 10), // yyyy-mm-dd
       lifeExpectancyYears: user.lifeExpectancyYears,
       currentWeekIndex,
-      trackingStartWeekIndex: trackingStart,
       weeks,
     };
   }
@@ -114,13 +114,18 @@ export class LifeService {
   //  Refresh path — called by scheduler + on-read fallback
   // ---------------------------------------------------------------------------
 
-  /// Upsert `week_activity_minutes` for one user. Covers every week that
-  /// has either telemetry rollup data OR a completed Focus Session.
-  /// Idempotent — re-running produces identical rows.
+  /// Upsert `week_activity_minutes` for one user. One row per week with
+  /// any telemetry rollup data. Idempotent — re-running produces
+  /// identical rows.
   ///
   /// Why raw SQL: the aggregation key is `FLOOR((minuteBucket - birthday) / 1 week)`,
   /// a computed expression Prisma can't group on. One statement is also
   /// cheaper than fetching ~2M rollup rows into Node.
+  ///
+  /// Nested CTE shape: Postgres can GROUP BY on a SELECT alias but not on
+  /// a parameterised computed expression when the SELECT's textual form
+  /// differs from the GROUP BY's — so we compute `week_index` once in
+  /// `telemetry_rows` and aggregate on the alias in `telemetry_weeks`.
   async refreshForUser(userId: string): Promise<{ weeksWritten: number }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -128,16 +133,6 @@ export class LifeService {
     });
     if (!user?.birthday) return { weeksWritten: 0 };
 
-    // Parameterised query — `userId` is a cuid and `birthday` is a Date;
-    // both go through Prisma's typed template literal so there's no
-    // injection surface. `birthday` is DATE in Postgres → cast to
-    // timestamp so the subtraction returns an interval cleanly.
-    //
-    // Nested CTE shape: the aggregation key is a computed expression
-    // (`week_index`). Postgres happily GROUP BYs on a SELECT alias but
-    // *not* on a repeated expression when it textually differs from the
-    // SELECT's parameterised version — so we compute week_index once in
-    // `telemetry_rows` and then aggregate on the alias in `telemetry_weeks`.
     const result = await this.prisma.$executeRaw(Prisma.sql`
       WITH wb AS (
         SELECT ${userId}::text AS user_id, ${user.birthday}::timestamp AS birthday
@@ -158,36 +153,15 @@ export class LifeService {
           (SUM(duration_ms) / 60000)::int AS total_minutes
         FROM telemetry_rows
         GROUP BY user_id, week_index
-      ),
-      session_weeks AS (
-        SELECT DISTINCT
-          wb.user_id,
-          FLOOR(EXTRACT(EPOCH FROM (s."endedAt" - wb.birthday)) / ${SEC_PER_WEEK})::int AS week_index
-        FROM "FocusSession" s, wb
-        WHERE s."userId" = wb.user_id
-          AND s.state = 'completed'
-          AND s."endReason" IN ('manual_stop', 'timer_complete')
-          AND s."endedAt" IS NOT NULL
-          AND s."endedAt" >= wb.birthday
-      ),
-      candidate_weeks AS (
-        SELECT user_id, week_index FROM telemetry_weeks
-        UNION
-        SELECT user_id, week_index FROM session_weeks
       )
       INSERT INTO week_activity_minutes ("userId", "weekIndex", "totalMinutes", "hasSessions", "computedAt")
       SELECT
-        cw.user_id,
-        cw.week_index,
-        COALESCE(tw.total_minutes, 0),
-        EXISTS (
-          SELECT 1 FROM session_weeks sw
-          WHERE sw.user_id = cw.user_id AND sw.week_index = cw.week_index
-        ),
+        tw.user_id,
+        tw.week_index,
+        tw.total_minutes,
+        FALSE,           -- session overlay removed; column stays for schema stability
         NOW()
-      FROM candidate_weeks cw
-      LEFT JOIN telemetry_weeks tw
-        ON tw.user_id = cw.user_id AND tw.week_index = cw.week_index
+      FROM telemetry_weeks tw
       ON CONFLICT ("userId", "weekIndex") DO UPDATE
         SET "totalMinutes" = EXCLUDED."totalMinutes",
             "hasSessions"  = EXCLUDED."hasSessions",
@@ -227,23 +201,5 @@ export class LifeService {
     });
     if (!row) return true;
     return Date.now() - row.computedAt.getTime() > CURRENT_WEEK_STALE_MS;
-  }
-
-  /// Earliest week-since-birthday for which this user has any telemetry
-  /// rollup data. Returns null when they've never paired a source.
-  /// Used by the client to distinguish "measured but idle" from
-  /// "pre-tracking" per spec §4.2.
-  private async resolveTrackingStartWeekIndex(
-    userId: string,
-    birthdayMs: number,
-  ): Promise<number | null> {
-    const earliest = await this.prisma.activityMinuteRollup.findFirst({
-      where: { userId },
-      orderBy: { minuteBucket: 'asc' },
-      select: { minuteBucket: true },
-    });
-    if (!earliest) return null;
-    const delta = earliest.minuteBucket.getTime() - birthdayMs;
-    return Math.max(0, Math.floor(delta / MS_PER_WEEK));
   }
 }
