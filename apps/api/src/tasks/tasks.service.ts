@@ -124,8 +124,17 @@ export class TasksService {
       data.routineDaysOfWeek = Array.from(new Set(body.routineDaysOfWeek)).sort(
         (a, b) => a - b,
       );
+      // Tasks.md §3.1 — `routineStartDate` "defaults to creation date".
+      // Omitting it from the request MUST NOT persist NULL: the nightly
+      // maintenance back-fill treats NULL as "no lower bound" and will
+      // generate MAX_CATCHUP_DAYS of past missed instances, tanking the
+      // consistency chart with history the user never opted into.
+      // Resolving today in the user's tz costs one extra User lookup —
+      // worth it to keep the spec default honest.
       data.routineStartDate =
-        body.routineStartDate !== undefined ? toDbDate(body.routineStartDate) : null;
+        body.routineStartDate !== undefined
+          ? toDbDate(body.routineStartDate)
+          : toDbDate(await this.todayInUserTz(userId));
       data.routineEndDate =
         body.routineEndDate !== undefined && body.routineEndDate !== null
           ? toDbDate(body.routineEndDate)

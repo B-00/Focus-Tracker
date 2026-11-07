@@ -201,25 +201,25 @@ export class MaintenanceService {
     const dayDbDate = toDbDate(day);
     const isoWeekday = isoWeekdayOfYmd(day);
 
+    // Back-fill MUST require an explicit routineStartDate — a NULL
+    // start matches "every past day" and would generate up to
+    // MAX_CATCHUP_DAYS of unwanted missed instances per user. The
+    // create path in TasksService now defaults the start date to
+    // today-in-user-tz, so this filter should never exclude a
+    // legitimate routine. See Tasks.md §3.1 + §5.5 Step 1.
+    // (listToday keeps its NULL branch — showing today's instance for
+    // a legacy null-start routine is harmless; back-filling history
+    // is not.)
     const routines = await this.prisma.task.findMany({
       where: {
         userId,
         kind: 'routine',
         archivedAt: null,
         routineDaysOfWeek: { has: isoWeekday },
-        AND: [
-          {
-            OR: [
-              { routineStartDate: null },
-              { routineStartDate: { lte: dayDbDate } },
-            ],
-          },
-          {
-            OR: [
-              { routineEndDate: null },
-              { routineEndDate: { gte: dayDbDate } },
-            ],
-          },
+        routineStartDate: { lte: dayDbDate },
+        OR: [
+          { routineEndDate: null },
+          { routineEndDate: { gte: dayDbDate } },
         ],
       },
       select: { id: true, priority: true },
