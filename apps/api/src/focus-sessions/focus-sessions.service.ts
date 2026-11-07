@@ -461,8 +461,7 @@ export class FocusSessionsService {
 
   /// §9.8 — mark sessions that have been running/paused for > 24h as aborted.
   /// endedAt lands at startedAt + 24h (or plannedDurationMs, whichever is
-  /// smaller) so Memento Mori's weekly shading can't be contaminated by a
-  /// phantom multi-day session.
+  /// smaller) so `/focus` history doesn't carry a phantom multi-day session.
   async abortStaleSessions(): Promise<{ aborted: number }> {
     const now = new Date();
     const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);

@@ -1,7 +1,7 @@
 # Focus Tracker — Memento Mori Life Calendar (Feature Spec)
 
 > A weeks-of-life grid: one cell per week from birth to a configurable life expectancy.
-> Past weeks are shaded by **total active telemetry minutes** that week (base layer), with a small overlay marker on weeks that contained any Focus Sessions. Current week is highlighted; future weeks are empty except for user-defined milestone markers.
+> Past weeks are shaded by **total active telemetry minutes** that week. Current week is highlighted; future weeks are empty except for user-defined milestone markers.
 > Clicking a past week opens a stats panel with a writable journal note.
 
 **Status:** Specification in progress. v1 first batch (see `PROJECT.md` §6).
@@ -48,7 +48,6 @@ The Memento Mori view lives at `/life`; a compact strip (just the current row + 
 | --------------- | ------------------------------------------------------------------ |
 | Past, no data   | Filled with a neutral base color (lived, but no telemetry data yet — e.g. before sources were paired) |
 | Past, with data | Filled with a color whose intensity scales with **total active telemetry minutes** that week (heatmap; see §4.2) |
-| Past, with at least one Focus Session | Same shading as above PLUS a small **session overlay marker** (see §4.2) |
 | Current week    | Distinct border / accent color so it's instantly findable          |
 | Future          | Outlined / unfilled                                                |
 | Milestone overlay | Small icon or colored dot inside the cell (see §3.4)             |
@@ -104,21 +103,12 @@ Notes are only writable for **past** weeks. Today's week becomes writable as soo
 
 ### 4.2 Color shading for past weeks (heatmap)
 
-Two visual layers, intentionally separated so the user can read both signals at once:
-
-**Base layer — total active telemetry minutes (the "how full was your week" story)**
+**Metric — total active telemetry minutes (the "how full was your week" story)**
 - Metric: **total active telemetry minutes** in that week, summed from `activity_minute_rollup` (see `Activity.md` §3.2) across both sources (browser + desktop). Idle periods are naturally absent from the rollup (source clients close out `focus_change` events on internal idle detection; see `Sources Markdown/Extension.md` §6.1 / `Sources Markdown/DesktopApp.md` §7.1).
-- Why telemetry, not session-only: telemetry is always-on (`Activity.md` §1, `FocusSession.md` §1), so this metric captures every week the user actually used their devices — not just weeks when they remembered to start a Focus Session. A week with 40 hours of telemetry but zero sessions is still a "lived, active week" and should not look empty.
+- Why telemetry: telemetry is always-on (`Activity.md` §1), so this metric captures every week the user actually used their devices.
 - Scale: 5–7 buckets mapped to a sequential color ramp. Bucket boundaries are tunable; start with day-equivalents (e.g. 0, < 5h, 5–15h, 15–30h, 30–50h, 50h+) and adjust visually.
 - "Past with zero minutes" (week happened but no telemetry, e.g. vacation, devices off) shows the lightest non-empty shade.
 - "Past, no telemetry data yet" (weeks before the user paired any source) gets a distinct neutral so it's clearly *unmeasured* rather than *measured-and-zero*.
-
-**Overlay marker — Focus Session presence (the "intentional deep work" story)**
-- If the week contained **at least one** completed Focus Session (any `effectiveDurationMs > 0`), add a small distinctive marker to the cell. Candidates: a tiny corner dot, a centered ring, or a thin border accent. Final visual is a UI detail.
-- This overlay is binary in v1 — present or not. We do *not* try to encode "how much" session time into the marker; the user can click the cell for exact numbers.
-- Rationale: shading by sessions alone would make many real weeks look blank; shading by telemetry alone would lose the signal of "weeks I actually did intentional work." The overlay is the lightest-weight way to preserve both stories.
-
-Aborted sessions (see `FocusSession.md` §9.8) do **not** count toward the overlay — only `completed` sessions with `endReason IN ('manual_stop', 'timer_complete')`.
 
 ### 4.3 Current week marker
 - Heavier border (2px accent color).
@@ -140,9 +130,8 @@ Aborted sessions (see `FocusSession.md` §9.8) do **not** count toward the overl
 ### 5.1 Click a past week
 - Opens a side panel (right drawer) showing:
   - Date range of that week.
-  - **Total active telemetry minutes** that week (matches the cell's base shade).
-  - **Focus Session breakdown:** number of sessions + total `effectiveDurationMs` (matches the cell's overlay marker presence).
-  - **Top 3 apps and top 3 websites by time** — from all telemetry that week (not session-filtered), so the picture is honest about *what you actually did* even if no sessions were started.
+  - **Total active telemetry minutes** that week (matches the cell's shade).
+  - **Top 3 apps and top 3 websites by time** — from all telemetry that week, so the picture is honest about *what you actually did*.
   - Number of tasks completed (tasks whose `completedAt` fell in the week).
   - A textarea for the **WeekNote** body (autosaves on blur). Empty by default.
 - Esc or click-outside closes the panel.
@@ -166,14 +155,13 @@ Aborted sessions (see `FocusSession.md` §9.8) do **not** count toward the overl
 ## 6. Behavior
 
 ### 6.1 Data fetching
-- `GET /v1/life/grid` → returns aggregate buckets: `{ weekIndex, telemetryMinutes, hasSessions }[]` for all past weeks where the user has any data, plus `birthday`, `lifeExpectancyYears`, `currentWeekIndex`. One request renders the whole grid (4,000 ints + booleans + metadata = tiny).
+- `GET /v1/life/grid` → returns aggregate buckets: `{ weekIndex, telemetryMinutes }[]` for all past weeks where the user has any data, plus `birthday`, `lifeExpectancyYears`, `currentWeekIndex`. One request renders the whole grid (4,000 ints + metadata = tiny).
 - `GET /v1/milestones` → list of all milestones (also tiny).
 - `GET /v1/life/weeks/{weekIndex}` → on-demand for the clicked week's drawer: stats + WeekNote body + top-apps/sites.
 
 ### 6.2 Aggregation
-- **Base layer (telemetry minutes):** rolled up from `activity_minute_rollup` (see `Activity.md` §3.2) into a `week_activity_minutes` summary table. The nightly maintenance job (`Tasks.md` §5.5) — or a sibling job in the same scheduled service — refreshes the current and previous weeks; older weeks are immutable once a week has fully ended.
-- **Overlay layer (sessions present):** a boolean computed by `EXISTS (SELECT 1 FROM focus_session WHERE userId = ? AND endedAt within week AND state = 'completed')`. Cheap; can be inlined into the same summary table or computed at read time.
-- The API never sums raw events or raw sessions on each render — both layers come from precomputed columns.
+- Telemetry minutes are rolled up from `activity_minute_rollup` (see `Activity.md` §3.2) into a `week_activity_minutes` summary table. The nightly maintenance job (`Tasks.md` §5.5) — or a sibling job in the same scheduled service — refreshes the current and previous weeks; older weeks are immutable once a week has fully ended.
+- The API never sums raw events on each render — the shading column comes from the precomputed summary table.
 
 ### 6.3 WeekNote autosave
 - Debounced 1s after the user stops typing; explicit "Saved" indicator in the drawer.
@@ -213,8 +201,7 @@ Aborted sessions (see `FocusSession.md` §9.8) do **not** count toward the overl
 
 ## 9. Dependencies
 
-- **Activity / always-on telemetry** (`Features Markdown/Activity.md`) — source of the base shading layer's "total active telemetry minutes" via `activity_minute_rollup`.
-- **Focus Sessions** (`Features Markdown/FocusSession.md`) — source of the overlay marker (presence of any `completed` session in the week) and the weekly session count + total `effectiveDurationMs` in the drawer.
+- **Activity / always-on telemetry** (`Features Markdown/Activity.md`) — source of the shading's "total active telemetry minutes" via `activity_minute_rollup`.
 - **Tasks** (`Features Markdown/Tasks.md`) — for the weekly "tasks completed" stat in the drawer.
 - User settings: `birthday`, `lifeExpectancyYears`.
 - **date-fns** for week math.
@@ -224,10 +211,9 @@ Aborted sessions (see `FocusSession.md` §9.8) do **not** count toward the overl
 ## 10. Open Questions / TODOs
 
 - 52 weeks/year is an approximation; some years have 53 ISO weeks. For v1, treat each row as exactly 52 cells (poster-style); the small calendar drift is acceptable. Revisit only if it ever feels wrong in practice.
-- Metric toggle (telemetry minutes / focus-session minutes / tasks completed) — deferred. v1 fixes telemetry-minutes as base + session-presence as overlay (§4.2).
-- **Cell visual treatment for the session overlay** (corner dot vs centered ring vs accent border) is intentionally left open in §4.2 — settle during UI implementation.
-- Should milestones in the past also visually overlay on past cells (icon on top of the heatmap color)? Yes, but how the icon interacts with the heatmap intensity AND the session marker needs design work.
-- "Multiple metrics overlaid" idea (e.g. focus-color + task-count dots) — explicitly deferred to keep v1 readable.
+- Metric toggle (telemetry minutes / tasks completed) — deferred. v1 fixes telemetry-minutes as the only shading signal (§4.2).
+- Should milestones in the past also visually overlay on past cells (icon on top of the heatmap color)? Yes, but how the icon interacts with the heatmap intensity needs design work.
+- "Multiple metrics overlaid" idea (e.g. telemetry-color + task-count dots) — explicitly deferred to keep v1 readable.
 - Export / print as a poster — out of scope but a natural v2.
 - "Week 0" semantics — does the week containing the user's birthday count as week 0 or week 1? Decision above: week 0. Confirm with a test on real data.
 - Time zones: weeks are bucketed in the user's local timezone (stored on the User). Crossing DST: ignored for v1 (poster, not a clock).

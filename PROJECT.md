@@ -9,9 +9,9 @@
 
 Focus Tracker is a personal web application for managing tasks, tracking focused work, and reflecting on time. The v1 feature set is intentionally small and centers on four surfaces:
 
-- A **Calendar** showing dated tasks and past focus sessions, with the ability to create dated tasks directly from it.
+- A **Calendar** showing dated tasks on a month grid, with the ability to create dated tasks directly from it.
 - A **Tasks** module with user-defined Sections and simple checkbox completion (some tasks have dates or date-ranges; others are ongoing).
-- A **Memento Mori life calendar** — a weeks-of-life grid shaded by total active telemetry minutes, overlaid with a marker on weeks containing Focus Sessions, annotated with milestones, with a writable journal note per week.
+- A **Memento Mori life calendar** — a weeks-of-life grid shaded by total active telemetry minutes, annotated with milestones, with a writable journal note per week.
 - A **Focus Session** runner — a labeled time window that stamps active telemetry events with a session id so the user can later see what their attention went to during the session. Telemetry runs **always** (see below); sessions are a labeling overlay, not a gate.
 - An **Activity** viewer — the always-on telemetry surface. Shows app and site usage continuously, independent of sessions.
 
@@ -291,8 +291,8 @@ The v1 app feature set is intentionally small. Each feature has its own dedicate
 | ----------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
 | Dashboard                     | `Features Markdown/Dashboard.md`                 | Home composition surface at `/`. Single-column, fully responsive, fully customizable (hide/show + reorder, persisted server-side via `UserDashboardPrefs`). Stitches together the eight v1 widgets contributed by Focus Session, Tasks (Today's / Ongoing / Backlog), Activity, TaskCharts (two global), and Memento Mori. Also owns the **cross-route sticky session bar** that surfaces an active Focus Session on every route except `/focus`. |
 | Tasks                         | `Features Markdown/Tasks.md`                     | User-defined Sections containing tasks of three kinds: **Dated**, **Ongoing**, **Routine**. Every task carries a required **priority** (`low / mid / high / extreme`) that drives sort order everywhere and powers the chart's weighted scoring. Single-day dated tasks support opt-in transfer-to-next-day + Backlog (Backlog defaults to grouping by priority). |
-| Calendar                      | `Features Markdown/Calendar.md`                  | Displays dated tasks + past focus sessions; create/edit dated tasks directly from the calendar            |
-| Memento Mori Life Calendar    | `Features Markdown/MementoMori.md`               | Weeks-of-life grid; past weeks shaded by total active telemetry minutes (base) + a marker on weeks containing Focus Sessions (overlay); configurable lifespan + milestones; clickable for stats + per-week journal note |
+| Calendar                      | `Features Markdown/Calendar.md`                  | Month-grid of dated tasks; create / edit dated tasks directly from the calendar                            |
+| Memento Mori Life Calendar    | `Features Markdown/MementoMori.md`               | Weeks-of-life grid; past weeks shaded by total active telemetry minutes; configurable lifespan + milestones; clickable for stats + per-week journal note |
 | Focus Session                 | `Features Markdown/FocusSession.md`              | Timer-bound or open-ended session that *labels* events in the always-on telemetry stream from §12; pause/resume with logged interruptions; cross-route sticky bar surfaces the active session everywhere. |
 | Activity                      | `Features Markdown/Activity.md`                  | Always-on telemetry viewer: today / week / month app + site breakdowns and recent switches, independent of sessions; dedicated `/activity` route + dashboard widget. No display-side filtering in v1 — what the source clients capture is what the user sees. |
 | Task Charts                   | `Features Markdown/TaskCharts.md`                | Consistency visualization for **routine** and **single-day dated** tasks. Three chart blocks: **Global Routine**, **Global Dated**, and **Per-Section Dated**. Globals appear at the top of `/tasks` and on the dashboard; per-Section Dated charts appear inline in the Dated panel of `/tasks`. All blocks use the same stock-style cumulative-score line chart with a **priority-weighted, mid-as-reference base score** (`completedWeight / scheduledCount` where weights are extreme=2 / high=1.5 / mid=1 / low=0.5; -1 floor for zero-completion days). Daily score range is `[-1, +2]` for Routine: a fully-completed extreme day reaches +2, a fully-completed mid day +1, a fully-completed low day +0.5 — completing high-priority work genuinely outscores completing low-priority work. The Dated family adds a geometric-decay **Backlog penalty** layered on top (-2 for the highest-priority task entering Backlog that day, then halving for each subsequent task in descending priority order — bounded near -3 total), giving a daily score range of `[-4, +2]`. A GitHub-style completion heatmap visual is deferred to v2 (see `TaskCharts.md` §11). |
@@ -408,7 +408,7 @@ Every endpoint is owned by exactly one spec. To find the definition for a route,
 | `/v1/activity/*`                               | `Features Markdown/Activity.md` §6         | `summary`, `recent`, `by-day`. Also consumed by Memento Mori.                           |
 | `/v1/milestones/*`                             | `Features Markdown/MementoMori.md` §7      | Milestone CRUD; consumed by both `/life` route and Settings.                            |
 | `/v1/life/*`                                   | `Features Markdown/MementoMori.md` §7      | Grid data + week notes.                                                                  |
-| `/v1/calendar/*`                               | `Features Markdown/Calendar.md` §7         | Per-month aggregated view (tasks + sessions).                                            |
+| `/v1/calendar/*`                               | `Features Markdown/Calendar.md` §7         | Calendar reuses `/v1/tasks?from=&to=`; no dedicated calendar endpoints in v1.           |
 
 ### 7.7 Endpoints not owned by a feature spec
 
@@ -559,7 +559,7 @@ Events are POSTed in batches of up to 50 inside a small envelope (`batchId`, `de
 
 **Downstream consumers of the always-on stream:**
 - `Features Markdown/Activity.md` — primary surface; reads the minute rollup, aggregates on demand.
-- `Features Markdown/MementoMori.md` §4.2 — base shading aggregated from the minute rollup over weekly windows.
+- `Features Markdown/MementoMori.md` §4.2 — week shading aggregated from the minute rollup over weekly windows.
 - `Features Markdown/FocusSession.md` §8.4 — post-session breakdown reads events `WHERE focusSessionId = :id` (the labeled subset).
 
 ### 12.6 API surface (sketch — full shapes go in §7)

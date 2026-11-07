@@ -207,18 +207,23 @@ interface DayCellProps {
 function DayCell({ date, inMonth, today, tasks, sectionsById }: DayCellProps) {
   const dayNum = date.getDate();
   // `role="gridcell"` is required by the grid above. We also label the
-  // cell so screen readers announce "Today, June 12" per §3.3 / §8.
+  // cell so screen readers announce "Today, June 12" per §3.2 / §8.
   const dateLabel = new Intl.DateTimeFormat(undefined, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
   }).format(date);
+  // ponytail: pure-CSS hover tooltip via `group` + opacity transition.
+  // Cheaper than the Life grid's rect-captured floating tooltip because
+  // a month grid is 42 cells max and the tooltip only needs to clear
+  // the cell it sits over — no viewport-edge drift worth solving.
+  const hasTasks = tasks.length > 0;
   return (
     <div
       role="gridcell"
       aria-label={today ? `Today, ${dateLabel}` : dateLabel}
       className={[
-        'relative min-h-[6rem] rounded-md border p-1.5 text-xs',
+        'group relative min-h-[6rem] rounded-md border p-1.5 text-xs',
         today
           ? 'border-emerald-500/60 bg-emerald-500/5'
           : 'border-neutral-800 bg-neutral-900/30',
@@ -244,6 +249,64 @@ function DayCell({ date, inMonth, today, tasks, sectionsById }: DayCellProps) {
           />
         ))}
       </div>
+      {hasTasks && (
+        <DayTooltip
+          dateLabel={dateLabel}
+          tasks={tasks}
+          sectionsById={sectionsById}
+        />
+      )}
+    </div>
+  );
+}
+
+interface DayTooltipProps {
+  dateLabel: string;
+  tasks: TaskResponse[];
+  sectionsById: Map<string, SectionResponse>;
+}
+
+// Per-cell task list, revealed on hover. Lives inside the cell as a
+// `group-hover` opacity transition so there's no JS at all. `z-20` keeps
+// it above sibling cells; `left-1/2 -translate-x-1/2` centers it over
+// the cell; `-translate-y-full -top-2` floats it above the cell with
+// an 8px gap. `max-h-56 overflow-y-auto` guards against future days
+// with a huge pile of tasks without pushing the tooltip past the viewport.
+function DayTooltip({ dateLabel, tasks, sectionsById }: DayTooltipProps) {
+  const priorityColors = usePriorityColors();
+  return (
+    <div
+      role="tooltip"
+      aria-hidden
+      className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 -translate-y-full -mt-2 w-56 max-h-56 overflow-y-auto rounded-md border border-neutral-700 bg-neutral-950/95 p-2 text-[0.7rem] text-neutral-100 opacity-0 shadow-xl backdrop-blur transition-opacity duration-150 group-hover:opacity-100"
+    >
+      <p className="mb-1.5 font-medium text-neutral-300">{dateLabel}</p>
+      <ul className="flex flex-col gap-1">
+        {tasks.map((t) => {
+          const section = t.sectionId ? sectionsById.get(t.sectionId) : undefined;
+          const completed = t.completedAt !== null;
+          return (
+            <li
+              key={t.id}
+              className={`flex items-start gap-1.5 ${completed ? 'text-neutral-400 line-through' : ''}`}
+            >
+              <span
+                aria-hidden
+                className="shrink-0 font-semibold"
+                style={{ color: priorityColors[t.priority] }}
+              >
+                {PRIORITY_GLYPH[t.priority]}
+              </span>
+              <span className="flex-1">
+                <span className="block">{t.title}</span>
+                <span className="block text-[0.6rem] text-neutral-500">
+                  {section?.name ?? 'Inbox'}
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
