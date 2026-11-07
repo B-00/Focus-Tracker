@@ -53,7 +53,7 @@ export function DashboardPage() {
   const visibleOrder = order.filter((id) => !hidden.has(id));
 
   return (
-    <main className="mx-auto flex min-h-full max-w-2xl flex-col gap-4 px-6 py-8">
+    <main className="mx-auto flex min-h-full max-w-5xl flex-col gap-4 px-6 py-8">
       <header className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
