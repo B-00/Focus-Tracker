@@ -7,23 +7,23 @@ import { DashboardSection } from './settings/DashboardSection';
 import { DevicesSection } from './settings/DevicesSection';
 import { MementoMoriSection } from './settings/MementoMoriSection';
 import { ProfileSection } from './settings/ProfileSection';
-import { TelemetrySection } from './settings/TelemetrySection';
 
 // /settings — left-rail tab layout per Settings.md §3.1.
 // Each tab has a kebab-case `#anchor` ID; loading /settings#devices lands
 // the user directly on Devices. Hash updates use replaceState so back
 // button isn't cluttered (per spec).
 //
-// All six tabs are implemented: Profile, Memento Mori, Dashboard,
-// Devices, Telemetry, About. Each section component lives under
-// ./settings/ and owns its own data + save semantics.
+// All five tabs are implemented: Profile, Memento Mori, Dashboard,
+// Devices, About. Each section component lives under ./settings/ and
+// owns its own data + save semantics. (The spec's #telemetry tab was
+// removed as redundant — DevicesSection already surfaces the API base
+// URL via the same ApiBaseUrlBanner during the pairing flow.)
 
 type SectionId =
   | 'profile'
   | 'memento-mori'
   | 'dashboard'
   | 'devices'
-  | 'telemetry'
   | 'about';
 
 interface SectionDef {
@@ -36,7 +36,6 @@ const SECTIONS: ReadonlyArray<SectionDef> = [
   { id: 'memento-mori', label: 'Memento Mori' },
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'devices', label: 'Devices' },
-  { id: 'telemetry', label: 'Telemetry' },
   { id: 'about', label: 'About' },
 ];
 
@@ -160,8 +159,6 @@ export function SettingsPage() {
             <MementoMoriSection />
           ) : activeId === 'dashboard' ? (
             <DashboardSection />
-          ) : activeId === 'telemetry' ? (
-            <TelemetrySection />
           ) : activeId === 'about' ? (
             <AboutSection />
           ) : null}

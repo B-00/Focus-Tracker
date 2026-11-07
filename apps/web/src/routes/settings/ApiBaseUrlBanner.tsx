@@ -1,9 +1,13 @@
 import { useState } from 'react';
 
-// A copy-the-URL pill used by both #devices (as a convenience during the
-// pairing flow) and #telemetry (as the sole content of that tab —
-// Settings.md §4.5). One component, one source of truth for the copy
-// UX and the "where do the clients talk to" message.
+// A copy-the-URL pill shown in #devices as a convenience during the
+// pairing flow — one component, one source of truth for the copy UX
+// and the "where do the clients talk to" message.
+//
+// ponytail: originally also powered a dedicated #telemetry tab
+// (Settings.md §4.5), but that tab was redundant once this banner lived
+// inside Devices, so the tab was removed. Kept factored out of
+// DevicesSection so the clipboard-copy local state stays encapsulated.
 
 interface Props {
   url: string;
