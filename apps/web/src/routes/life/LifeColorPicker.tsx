@@ -6,9 +6,10 @@ import {
   type LifeColorRole,
 } from '../../lib/life-colors';
 
-// Horizontal 3-swatch color editor for the life grid. Matches the pill-
-// row shape of LifeSizePicker so size + grid-colors + heatmap-colors
-// read as a single visual row in the header.
+// Vertical list of (swatch + label) rows for the life-grid cell roles.
+// Lives in the right-hand sticky rail on /life; the column shape fits
+// a narrow rail better than the wide pill row we used while this sat
+// inside the header.
 //
 // Reset button still sits next to the title; scope is "grid roles only"
 // (lived / thisWeek / remaining) — the heatmap picker owns its own
@@ -47,22 +48,15 @@ export function LifeColorPicker() {
         )}
       </header>
 
-      <div
-        className="flex gap-2"
+      <ul
+        className="flex flex-col gap-1.5"
         role="group"
         aria-label="Grid cell colors"
       >
         {ROWS.map(({ role, label, hint }) => (
-          <div
-            key={role}
-            // Fixed item width so every swatch sits the same distance
-            // from its neighbours regardless of label length — the
-            // natural-width approach was pushing "This week" (wider
-            // label) further from "Lived" than from "Remaining".
-            className="flex w-16 flex-col items-center gap-1"
-          >
+          <li key={role} className="flex items-center gap-2">
             <span
-              className="relative block h-5 w-5 rounded-sm border border-neutral-700 shadow-inner"
+              className="relative block h-5 w-5 shrink-0 rounded-sm border border-neutral-700 shadow-inner"
               style={{ backgroundColor: colors[role] }}
               title={`${label} — ${hint}`}
             >
@@ -74,12 +68,12 @@ export function LifeColorPicker() {
                 aria-label={`${label} color`}
               />
             </span>
-            <span className="whitespace-nowrap text-[0.6rem] text-neutral-400">
+            <span className="whitespace-nowrap text-xs text-neutral-400">
               {label}
             </span>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

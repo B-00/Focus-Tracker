@@ -6,12 +6,12 @@ import {
 } from '../../lib/life-colors';
 import { LIFE_HEATMAP_LABELS, type HeatmapActiveTier } from '../../lib/life-heatmap';
 
-// Horizontal 4-swatch heatmap color editor. Mirrors LifeColorPicker's
-// pill-row shape so the three pickers (size / grid-colors / heatmap)
-// read as a single consistent visual row in the header.
+// Vertical list of (swatch + tier-range) rows. Shares visual shape
+// with LifeColorPicker — both live in the sticky right rail on /life.
 //
 // Doubles as the activity legend — spec §4.2 wants a visual key near
-// the grid, and this picker already shows each tier's color + hour range.
+// the grid, and this picker already shows each tier's color + hour
+// range.
 //
 // Reset scope: resets ONLY h1..h4, leaving Lived / This week /
 // Remaining alone. Mirrors the sibling picker's "my swatches" scope.
@@ -52,23 +52,17 @@ export function LifeHeatmapColorPicker() {
         )}
       </header>
 
-      <div
-        className="flex gap-2"
+      <ul
+        className="flex flex-col gap-1.5"
         role="group"
         aria-label="Heatmap tier colors"
       >
         {ROWS.map(({ role, tier }) => {
           const label = LIFE_HEATMAP_LABELS[tier];
           return (
-            <div
-              key={role}
-              // Fixed item width so all four swatches align with
-              // identical spacing (see LifeColorPicker for the same
-              // trade-off).
-              className="flex w-14 flex-col items-center gap-1"
-            >
+            <li key={role} className="flex items-center gap-2">
               <span
-                className="relative block h-5 w-5 rounded-sm border border-neutral-700 shadow-inner"
+                className="relative block h-5 w-5 shrink-0 rounded-sm border border-neutral-700 shadow-inner"
                 style={{ backgroundColor: colors[role] }}
                 title={`Pick a color for the ${label} activity tier`}
               >
@@ -80,13 +74,13 @@ export function LifeHeatmapColorPicker() {
                   aria-label={`${label} tier color`}
                 />
               </span>
-              <span className="whitespace-nowrap text-[0.6rem] text-neutral-400">
+              <span className="whitespace-nowrap text-xs text-neutral-400">
                 {label}
               </span>
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </section>
   );
 }

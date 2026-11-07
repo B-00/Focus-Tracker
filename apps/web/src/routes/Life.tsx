@@ -210,67 +210,82 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
 
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-8" style={cssVars}>
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-6">
-        <h1 className="text-2xl font-semibold tracking-tight">
+      <header className="mb-6">
+        <h1 className="text-center text-2xl font-semibold tracking-tight">
           Your life, one week at a time
         </h1>
-        <div className="flex flex-wrap items-start gap-2">
-          <LifeSizePicker />
-          <LifeColorPicker />
-          <LifeHeatmapColorPicker />
-        </div>
       </header>
 
-      {/* No overflow wrapper — the page's own scroll handles any grid
-          wider than the viewport. Nested overflow-x: auto forces
-          overflow-y to auto per CSS spec and that's the internal
-          scrollbar we just killed.
-          "Week N of M · X% lived" lives inside the grid wrapper now so
-          it sits left-aligned above the first row of cells per the
-          user's layout call. */}
-      <div className="mx-auto w-fit" onMouseLeave={onGridLeave}>
-        <p className="mb-2 text-base text-neutral-400">
-          {stats.currentWeekIndex < 0 ? (
-            'Grid starts on your birthday.'
-          ) : stats.currentWeekIndex >= totalWeeks ? (
-            <>You&apos;re past your estimated lifespan. Adjust it in Settings if you like.</>
-          ) : (
-            <>
-              Week{' '}
-              <span className="font-semibold text-neutral-200">
-                {stats.currentWeekIndex.toLocaleString()}
-              </span>{' '}
-              of{' '}
-              <span className="font-semibold text-neutral-200">
-                {totalWeeks.toLocaleString()}
-              </span>
-              {' · '}
-              <span className="font-semibold text-neutral-200">
-                {stats.percentLived.toFixed(1)}%
-              </span>{' '}
-              lived
-            </>
-          )}
-        </p>
-        <div className="flex items-start" style={{ gap: 'var(--cell-gap)' }}>
-          <YearAxis decades={decades} />
+      {/* Three-column CSS grid: [1fr spacer] [auto grid] [1fr aside].
+          The two 1fr rails push equally from both sides, so the middle
+          'auto' column (the life grid) stays horizontally centred in
+          <main> regardless of how wide the right rail is. The aside
+          then uses justify-self-end to hug the right edge of the
+          right-hand rail with the main's px-4 as its gap to the
+          viewport.
+          No overflow wrapper — the page's own scroll handles any grid
+          wider than the viewport; a nested overflow-x: auto would
+          force overflow-y: auto per CSS spec and introduce an inner
+          scrollbar we don't want. */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-6">
+        <div aria-hidden="true" />
+        <div className="w-fit" onMouseLeave={onGridLeave}>
+          <p className="mb-2 text-base text-neutral-400">
+            {stats.currentWeekIndex < 0 ? (
+              'Grid starts on your birthday.'
+            ) : stats.currentWeekIndex >= totalWeeks ? (
+              <>You&apos;re past your estimated lifespan. Adjust it in Settings if you like.</>
+            ) : (
+              <>
+                Week{' '}
+                <span className="font-semibold text-neutral-200">
+                  {stats.currentWeekIndex.toLocaleString()}
+                </span>{' '}
+                of{' '}
+                <span className="font-semibold text-neutral-200">
+                  {totalWeeks.toLocaleString()}
+                </span>
+                {' · '}
+                <span className="font-semibold text-neutral-200">
+                  {stats.percentLived.toFixed(1)}%
+                </span>{' '}
+                lived
+              </>
+            )}
+          </p>
+          <div className="flex items-start" style={{ gap: 'var(--cell-gap)' }}>
+            <YearAxis decades={decades} />
 
-          <div>
-            <WeekAxisTop />
-            <div className="flex flex-col" style={{ gap: 'var(--block-gap)' }}>
-              {decades.map(({ startYear, yearsInDecade }, decadeIdx) => (
-                <DecadeRow
-                  key={decadeIdx}
-                  startYear={startYear}
-                  yearsInDecade={yearsInDecade}
-                  currentWeekIndex={current}
-                  gridData={gridData}
-                  onCellHover={onCellHover}
-                />
-              ))}
+            <div>
+              <WeekAxisTop />
+              <div className="flex flex-col" style={{ gap: 'var(--block-gap)' }}>
+                {decades.map(({ startYear, yearsInDecade }, decadeIdx) => (
+                  <DecadeRow
+                    key={decadeIdx}
+                    startYear={startYear}
+                    yearsInDecade={yearsInDecade}
+                    currentWeekIndex={current}
+                    gridData={gridData}
+                    onCellHover={onCellHover}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
+
+        <aside
+          aria-label="Life grid settings"
+          // top-16 (64px) = AppShell's h-12 sticky nav (48px) + 16px
+          // breathing room, so the top of the picker rail clears the
+          // nav as the user scrolls down the long grid. justify-self-end
+          // pushes the rail to the right edge of its 1fr grid column.
+          className="sticky top-16 flex flex-col gap-2 self-start justify-self-end"
+        >
+          <LifeSizePicker />
+          <LifeColorPicker />
+          <LifeHeatmapColorPicker />
+        </aside>
       </div>
 
       {hover && (
