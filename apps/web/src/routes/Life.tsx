@@ -239,18 +239,12 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
             )}
           </p>
         </div>
-        <div className="flex items-start gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           <LifeSizePicker />
           <LifeColorPicker />
+          <LifeHeatmapColorPicker />
         </div>
       </header>
-
-      {/* Heatmap color picker doubles as the activity legend. Lives
-          between the header and the grid, left-aligned within the main
-          container per the Slice 2.1 layout call. */}
-      <div className="mb-4">
-        <LifeHeatmapColorPicker />
-      </div>
 
       {/* No overflow wrapper — the page's own scroll handles any grid
           wider than the viewport. Nested overflow-x: auto forces

@@ -6,16 +6,21 @@ import {
   type LifeColorRole,
 } from '../../lib/life-colors';
 
-// Compact three-row color editor for the life grid. Mirrors
-// PriorityColorPicker's shape: swatch (native <input type="color">) +
-// label + current hex. Picks propagate instantly via useLifeColors so
-// the main grid repaints as the user drags the picker.
+// Horizontal 3-swatch color editor for the life grid. Matches the pill-
+// row shape of LifeSizePicker so size + grid-colors + heatmap-colors
+// read as a single visual row in the header.
 //
-// ponytail: native color input, same reasoning as the priority picker.
+// Reset button still sits next to the title; scope is "grid roles only"
+// (lived / thisWeek / remaining) — the heatmap picker owns its own
+// reset for h1..h4.
+//
+// ponytail: still native <input type="color"> so dragging the swatch
+// propagates instantly via useLifeColors and the CSS-var fast path
+// repaints cells without re-rendering React.
 
 const ROWS: { role: LifeColorRole; label: string; hint: string }[] = [
-  { role: 'lived', label: 'Lived', hint: 'Weeks already past' },
-  { role: 'thisWeek', label: 'This week', hint: 'The current-week cell' },
+  { role: 'lived',     label: 'Lived',     hint: 'Weeks already past' },
+  { role: 'thisWeek',  label: 'This week', hint: 'The current-week cell' },
   { role: 'remaining', label: 'Remaining', hint: 'Weeks still to come' },
 ];
 
@@ -42,32 +47,35 @@ export function LifeColorPicker() {
         )}
       </header>
 
-      <ul className="flex flex-col gap-1.5">
+      <div
+        className="flex gap-1"
+        role="group"
+        aria-label="Grid cell colors"
+      >
         {ROWS.map(({ role, label, hint }) => (
-          <li
+          <div
             key={role}
-            className="flex items-center gap-2 text-xs text-neutral-200"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1"
           >
             <span
-              className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border border-neutral-700 shadow-inner"
+              className="relative block h-7 w-full rounded border border-neutral-700 shadow-inner"
               style={{ backgroundColor: colors[role] }}
-              title={`Pick a color for ${label} — ${hint}`}
+              title={`${label} — ${hint}`}
             >
               <input
                 type="color"
                 value={colors[role]}
                 onChange={(e) => setLifeColor(role, e.currentTarget.value)}
-                className="absolute inset-0 h-full w-full cursor-pointer rounded-sm opacity-0"
+                className="absolute inset-0 h-full w-full cursor-pointer rounded opacity-0"
                 aria-label={`${label} color`}
               />
             </span>
-            <span className="flex-1">{label}</span>
-            <span className="font-mono text-[0.65rem] uppercase text-neutral-500">
-              {colors[role]}
+            <span className="whitespace-nowrap text-[0.6rem] text-neutral-400">
+              {label}
             </span>
-          </li>
+          </div>
         ))}
-      </ul>
+      </div>
     </section>
   );
 }
