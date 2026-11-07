@@ -14,13 +14,37 @@ export interface LifeSizePreset {
   axisFont: string;  // tick label font-size
   axisW: number;     // year-axis column width, px
   axisH: number;     // week-axis row height, px
+  /// Cell-hover tooltip dimensions. Scales with cell size so XL grids
+  /// don't look weird with a tiny S-sized tooltip floating over a
+  /// 20-pixel cell. `h` is a conservative estimate used only for the
+  /// viewport-edge clamp logic in CellTooltip.
+  tooltip: {
+    w: number;
+    h: number;
+    pad: string;
+    headerFont: string;
+    valueFont: string;
+    detailFont: string;
+  };
 }
 
 export const LIFE_SIZE_PRESETS: Record<LifeSize, LifeSizePreset> = {
-  s:  { cell: 8,  gap: 2, blockGap: 8,  axisFont: '0.55rem', axisW: 26, axisH: 14 },
-  m:  { cell: 10, gap: 2, blockGap: 10, axisFont: '0.6rem',  axisW: 32, axisH: 18 },
-  l:  { cell: 14, gap: 3, blockGap: 14, axisFont: '0.75rem', axisW: 40, axisH: 22 },
-  xl: { cell: 20, gap: 4, blockGap: 20, axisFont: '0.9rem',  axisW: 52, axisH: 28 },
+  s:  {
+    cell: 8, gap: 2, blockGap: 8, axisFont: '0.55rem', axisW: 26, axisH: 14,
+    tooltip: { w: 176, h: 92,  pad: '0.6rem',   headerFont: '0.6rem',  valueFont: '0.85rem',  detailFont: '0.65rem' },
+  },
+  m:  {
+    cell: 10, gap: 2, blockGap: 10, axisFont: '0.6rem', axisW: 32, axisH: 18,
+    tooltip: { w: 192, h: 104, pad: '0.75rem',  headerFont: '0.65rem', valueFont: '1rem',     detailFont: '0.7rem'  },
+  },
+  l:  {
+    cell: 14, gap: 3, blockGap: 14, axisFont: '0.75rem', axisW: 40, axisH: 22,
+    tooltip: { w: 224, h: 120, pad: '0.9rem',   headerFont: '0.7rem',  valueFont: '1.125rem', detailFont: '0.75rem' },
+  },
+  xl: {
+    cell: 20, gap: 4, blockGap: 20, axisFont: '0.9rem', axisW: 52, axisH: 28,
+    tooltip: { w: 272, h: 148, pad: '1.1rem',   headerFont: '0.8rem',  valueFont: '1.375rem', detailFont: '0.85rem' },
+  },
 };
 
 export const DEFAULT_LIFE_SIZE: LifeSize = 'm';

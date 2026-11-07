@@ -222,6 +222,7 @@ function LifeGrid({ birthday, lifeExpectancyYears }: GridProps) {
           rect={hover.rect}
           birthday={birthday}
           currentWeekIndex={current}
+          preset={size.tooltip}
         />
       )}
 
@@ -487,11 +488,12 @@ const HalfGrid = memo(function HalfGrid({
 //  CellTooltip — same visual pattern as HourlyBreakdown's chart tooltip.
 //  Anchored to the hovered cell via position: fixed + the client rect
 //  grabbed on mouseEnter. Clamped to the viewport so right/bottom-edge
-//  cells don't push the tooltip off-screen.
+//  cells don't push the tooltip off-screen. Dimensions scale with the
+//  active LifeSize preset so the tooltip stays proportionate to the
+//  grid (a 192px tooltip over 20px XL cells looks cramped; an 8px S
+//  cell over a 272px tooltip looks silly).
 // ---------------------------------------------------------------------------
 
-const TOOLTIP_W = 192;    // px — matches the w-48 Tailwind class
-const TOOLTIP_H = 96;     // px — rough max; only used for clamp math
 const TOOLTIP_GAP = 8;    // gap between cell edge and tooltip
 
 const DATE_FMT = new Intl.DateTimeFormat(undefined, {
@@ -500,14 +502,30 @@ const DATE_FMT = new Intl.DateTimeFormat(undefined, {
   year: 'numeric',
 });
 
+interface CellTooltipPreset {
+  w: number;
+  h: number;
+  pad: string;
+  headerFont: string;
+  valueFont: string;
+  detailFont: string;
+}
+
 interface CellTooltipProps {
   idx: number;
   rect: HoverRect;
   birthday: Date;
   currentWeekIndex: number;
+  preset: CellTooltipPreset;
 }
 
-function CellTooltip({ idx, rect, birthday, currentWeekIndex }: CellTooltipProps) {
+function CellTooltip({
+  idx,
+  rect,
+  birthday,
+  currentWeekIndex,
+  preset,
+}: CellTooltipProps) {
   const year = Math.floor(idx / WEEKS_PER_YEAR);
   const weekInYear = idx % WEEKS_PER_YEAR;
   const { start, end } = weekRange(birthday, idx);
@@ -523,9 +541,9 @@ function CellTooltip({ idx, rect, birthday, currentWeekIndex }: CellTooltipProps
   // Anchor above the cell; clamp to viewport so edges don't cut off.
   const anchorX = rect.left + rect.width / 2;
   const anchorY = rect.top;
-  let left = anchorX - TOOLTIP_W / 2;
-  left = Math.max(8, Math.min(window.innerWidth - TOOLTIP_W - 8, left));
-  let top = anchorY - TOOLTIP_GAP - TOOLTIP_H;
+  let left = anchorX - preset.w / 2;
+  left = Math.max(8, Math.min(window.innerWidth - preset.w - 8, left));
+  let top = anchorY - TOOLTIP_GAP - preset.h;
   if (top < 8) {
     // Flip below the cell if there's no room above.
     top = anchorY + rect.height + TOOLTIP_GAP;
@@ -534,20 +552,39 @@ function CellTooltip({ idx, rect, birthday, currentWeekIndex }: CellTooltipProps
   return (
     <div
       role="tooltip"
-      className="pointer-events-none fixed z-50 w-48 rounded-md border border-neutral-700 bg-neutral-900/95 p-3 text-xs shadow-lg backdrop-blur"
-      style={{ left, top }}
+      className="pointer-events-none fixed z-50 rounded-md border border-neutral-700 bg-neutral-900/95 shadow-lg backdrop-blur"
+      style={{ left, top, width: preset.w, padding: preset.pad }}
     >
-      <p className="text-[0.65rem] uppercase tracking-wider text-neutral-500">
+      <p
+        className="uppercase tracking-wider text-neutral-500"
+        style={{ fontSize: preset.headerFont }}
+      >
         Life week
       </p>
-      <p className="mt-0.5 text-[0.65rem] text-neutral-400">{rangeLabel}</p>
-      <p className="mt-1 font-mono tabular-nums text-base font-semibold text-neutral-100">
+      <p
+        className="mt-0.5 text-neutral-400"
+        style={{ fontSize: preset.headerFont }}
+      >
+        {rangeLabel}
+      </p>
+      <p
+        className="mt-1 font-mono tabular-nums font-semibold text-neutral-100"
+        style={{ fontSize: preset.valueFont }}
+      >
         Week {(idx + 1).toLocaleString()}
       </p>
-      <p className="mt-1 text-[0.7rem] text-neutral-300">
+      <p
+        className="mt-1 text-neutral-300"
+        style={{ fontSize: preset.detailFont }}
+      >
         Year {year + 1} · Week {weekInYear + 1} of {WEEKS_PER_YEAR}
       </p>
-      <p className="mt-0.5 text-[0.65rem] text-neutral-500">{relLabel}</p>
+      <p
+        className="mt-0.5 text-neutral-500"
+        style={{ fontSize: preset.headerFont }}
+      >
+        {relLabel}
+      </p>
     </div>
   );
 }
