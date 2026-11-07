@@ -16,6 +16,7 @@ import { ActivityPage } from './routes/Activity';
 import { TasksPage } from './routes/Tasks';
 import { BacklogPage } from './routes/Backlog';
 import { LifePage } from './routes/Life';
+import { CalendarPage } from './routes/Calendar';
 
 // Code-based routing (no codegen). Tree:
 //
@@ -117,6 +118,12 @@ const lifeRoute = createRoute({
   component: LifePage,
 });
 
+const calendarRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/calendar',
+  component: CalendarPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   protectedLayout.addChildren([
@@ -126,6 +133,7 @@ const routeTree = rootRoute.addChildren([
     focusRoute,
     activityRoute,
     lifeRoute,
+    calendarRoute,
     settingsRoute,
   ]),
 ]);

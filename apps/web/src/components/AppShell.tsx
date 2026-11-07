@@ -86,9 +86,24 @@ function AppHeader() {
         <nav className="flex items-center gap-1 text-sm" aria-label="Primary">
           <NavLink to="/" label="Dashboard" active={location === '/'} />
           <NavLink
+            to="/activity"
+            label="Activity"
+            active={location === '/activity' || location.startsWith('/activity')}
+          />
+          <NavLink
+            to="/life"
+            label="Life"
+            active={location === '/life' || location.startsWith('/life')}
+          />
+          <NavLink
             to="/tasks"
             label="Tasks"
             active={location === '/tasks' || location.startsWith('/tasks')}
+          />
+          <NavLink
+            to="/calendar"
+            label="Calendar"
+            active={location === '/calendar' || location.startsWith('/calendar')}
           />
           <NavLink
             to="/backlog"
@@ -100,16 +115,6 @@ function AppHeader() {
             to="/focus"
             label="Focus"
             active={location === '/focus' || location.startsWith('/focus')}
-          />
-          <NavLink
-            to="/activity"
-            label="Activity"
-            active={location === '/activity' || location.startsWith('/activity')}
-          />
-          <NavLink
-            to="/life"
-            label="Life"
-            active={location === '/life' || location.startsWith('/life')}
           />
           <NavLink
             to="/settings"
@@ -134,7 +139,7 @@ function AppHeader() {
 }
 
 interface NavLinkProps {
-  to: '/' | '/tasks' | '/backlog' | '/focus' | '/activity' | '/life' | '/settings';
+  to: '/' | '/tasks' | '/backlog' | '/focus' | '/activity' | '/life' | '/calendar' | '/settings';
   label: string;
   active: boolean;
   /// Optional count pill next to the label. Hidden when undefined / 0.
