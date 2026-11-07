@@ -1,8 +1,15 @@
-import { memo, useMemo, type CSSProperties } from 'react';
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchMeProfile, meQueryKeys } from '../lib/me-api';
-import { computeLifeStats, parseBirthday } from '../lib/life-math';
+import { computeLifeStats, parseBirthday, weekRange } from '../lib/life-math';
 import { useLifeColors } from '../lib/life-colors';
 import { LIFE_SIZE_PRESETS, useLifeSize } from '../lib/life-size';
 import { LifeColorPicker } from './life/LifeColorPicker';
@@ -106,6 +113,18 @@ function LifeGrid({ birthday, lifeExpectancyYears }: GridProps) {
   // already-exceeded lifespan still renders a sensible "current" cell.
   const current = Math.max(0, Math.min(totalWeeks - 1, stats.currentWeekIndex));
 
+  // ---- Hover tooltip state. See HourlyBreakdown.tsx for the inspiration
+  // pattern. Stored at this level so the tooltip component is a sibling
+  // of the grid (position: fixed anchored via the cell's client rect).
+  // Setter is useCallback'd for stable identity — HalfGrid is memo'd and
+  // we need the callback prop reference to be stable so hover updates
+  // don't bust the memo and re-render the ~5000 cell subtree.
+  const [hover, setHover] = useState<HoverState | null>(null);
+  const onCellHover = useCallback<HalfGridCellHover>((idx, rect) => {
+    setHover({ idx, rect });
+  }, []);
+  const onGridLeave = useCallback(() => setHover(null), []);
+
   // Chunk the years into decade blocks. Last block may be short if
   // lifeExpectancyYears isn't a multiple of 10 (e.g. 85 → 8 full + 1 half).
   const decades = useMemo(() => {
@@ -176,7 +195,7 @@ function LifeGrid({ birthday, lifeExpectancyYears }: GridProps) {
           wider than the viewport. Nested overflow-x: auto forces
           overflow-y to auto per CSS spec and that's the internal
           scrollbar we just killed. */}
-      <div className="mx-auto w-fit">
+      <div className="mx-auto w-fit" onMouseLeave={onGridLeave}>
         <div className="flex items-start" style={{ gap: 'var(--cell-gap)' }}>
           <YearAxis decades={decades} />
 
@@ -189,12 +208,22 @@ function LifeGrid({ birthday, lifeExpectancyYears }: GridProps) {
                   startYear={startYear}
                   yearsInDecade={yearsInDecade}
                   currentWeekIndex={current}
+                  onCellHover={onCellHover}
                 />
               ))}
             </div>
           </div>
         </div>
       </div>
+
+      {hover && (
+        <CellTooltip
+          idx={hover.idx}
+          rect={hover.rect}
+          birthday={birthday}
+          currentWeekIndex={current}
+        />
+      )}
 
       <p className="mt-6 text-xs text-neutral-500">
         Activity shading and session overlays land in later slices
@@ -317,16 +346,34 @@ const YearAxisBlock = memo(function YearAxisBlock({
 //  Cells inside read CSS vars rather than React props for the background.
 // ---------------------------------------------------------------------------
 
+interface HoverRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface HoverState {
+  idx: number;
+  rect: HoverRect;
+}
+
+/// Shared cell-hover callback signature. useCallback'd at LifeGrid and
+/// threaded down so React.memo on DecadeRow + HalfGrid holds.
+type HalfGridCellHover = (idx: number, rect: HoverRect) => void;
+
 interface DecadeRowProps {
   startYear: number;
   yearsInDecade: number;
   currentWeekIndex: number;
+  onCellHover: HalfGridCellHover;
 }
 
 const DecadeRow = memo(function DecadeRow({
   startYear,
   yearsInDecade,
   currentWeekIndex,
+  onCellHover,
 }: DecadeRowProps) {
   return (
     <div className="flex" style={{ gap: 'var(--block-gap)' }}>
@@ -336,6 +383,7 @@ const DecadeRow = memo(function DecadeRow({
         weekStart={0}
         weekCount={HALF_WEEKS}
         currentWeekIndex={currentWeekIndex}
+        onCellHover={onCellHover}
       />
       <HalfGrid
         startYear={startYear}
@@ -343,6 +391,7 @@ const DecadeRow = memo(function DecadeRow({
         weekStart={HALF_WEEKS}
         weekCount={HALF_WEEKS}
         currentWeekIndex={currentWeekIndex}
+        onCellHover={onCellHover}
       />
     </div>
   );
@@ -354,6 +403,7 @@ interface HalfGridProps {
   weekStart: number;   // 0 or 26
   weekCount: number;   // 26
   currentWeekIndex: number;
+  onCellHover: HalfGridCellHover;
 }
 
 const HalfGrid = memo(function HalfGrid({
@@ -362,6 +412,7 @@ const HalfGrid = memo(function HalfGrid({
   weekStart,
   weekCount,
   currentWeekIndex,
+  onCellHover,
 }: HalfGridProps) {
   // Default grid-auto-flow is 'row' — iterate year (row) first, then week
   // (col). DOM order matches visual order so no explicit grid-row/column
@@ -380,6 +431,13 @@ const HalfGrid = memo(function HalfGrid({
     }
     return out;
   }, [startYear, yearsInDecade, weekStart, weekCount]);
+
+  // One handler per HalfGrid — closes over onCellHover (stable). Reads
+  // the DOMRect from currentTarget for pixel-perfect tooltip anchoring.
+  const handleEnter = (idx: number) => (e: ReactMouseEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    onCellHover(idx, { left: r.left, top: r.top, width: r.width, height: r.height });
+  };
 
   return (
     <div
@@ -409,7 +467,7 @@ const HalfGrid = memo(function HalfGrid({
             key={idx}
             role="gridcell"
             aria-label={`Year ${year + 1}, week ${week + 1}${isCurrent ? ' (current)' : ''}`}
-            title={`Year ${year + 1} · Week ${week + 1}`}
+            onMouseEnter={handleEnter(idx)}
             className={
               isCurrent
                 ? 'rounded-[1px] ring-1 ring-emerald-200 shadow-[0_0_6px_rgba(52,211,153,0.6)]'
@@ -424,3 +482,72 @@ const HalfGrid = memo(function HalfGrid({
     </div>
   );
 });
+
+// ---------------------------------------------------------------------------
+//  CellTooltip — same visual pattern as HourlyBreakdown's chart tooltip.
+//  Anchored to the hovered cell via position: fixed + the client rect
+//  grabbed on mouseEnter. Clamped to the viewport so right/bottom-edge
+//  cells don't push the tooltip off-screen.
+// ---------------------------------------------------------------------------
+
+const TOOLTIP_W = 192;    // px — matches the w-48 Tailwind class
+const TOOLTIP_H = 96;     // px — rough max; only used for clamp math
+const TOOLTIP_GAP = 8;    // gap between cell edge and tooltip
+
+const DATE_FMT = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+interface CellTooltipProps {
+  idx: number;
+  rect: HoverRect;
+  birthday: Date;
+  currentWeekIndex: number;
+}
+
+function CellTooltip({ idx, rect, birthday, currentWeekIndex }: CellTooltipProps) {
+  const year = Math.floor(idx / WEEKS_PER_YEAR);
+  const weekInYear = idx % WEEKS_PER_YEAR;
+  const { start, end } = weekRange(birthday, idx);
+  // weekRange's `end` is exclusive (start + 7 days). Show the inclusive
+  // last day of the week in the range label, i.e. end - 1 day.
+  const inclusiveEnd = new Date(end.getTime() - 86_400_000);
+  const rangeLabel = `${DATE_FMT.format(start)} – ${DATE_FMT.format(inclusiveEnd)}`;
+
+  const delta = idx - currentWeekIndex;
+  const relLabel =
+    delta === 0 ? 'this week' : delta < 0 ? `${-delta} weeks ago` : `in ${delta} weeks`;
+
+  // Anchor above the cell; clamp to viewport so edges don't cut off.
+  const anchorX = rect.left + rect.width / 2;
+  const anchorY = rect.top;
+  let left = anchorX - TOOLTIP_W / 2;
+  left = Math.max(8, Math.min(window.innerWidth - TOOLTIP_W - 8, left));
+  let top = anchorY - TOOLTIP_GAP - TOOLTIP_H;
+  if (top < 8) {
+    // Flip below the cell if there's no room above.
+    top = anchorY + rect.height + TOOLTIP_GAP;
+  }
+
+  return (
+    <div
+      role="tooltip"
+      className="pointer-events-none fixed z-50 w-48 rounded-md border border-neutral-700 bg-neutral-900/95 p-3 text-xs shadow-lg backdrop-blur"
+      style={{ left, top }}
+    >
+      <p className="text-[0.65rem] uppercase tracking-wider text-neutral-500">
+        Life week
+      </p>
+      <p className="mt-0.5 text-[0.65rem] text-neutral-400">{rangeLabel}</p>
+      <p className="mt-1 font-mono tabular-nums text-base font-semibold text-neutral-100">
+        Week {(idx + 1).toLocaleString()}
+      </p>
+      <p className="mt-1 text-[0.7rem] text-neutral-300">
+        Year {year + 1} · Week {weekInYear + 1} of {WEEKS_PER_YEAR}
+      </p>
+      <p className="mt-0.5 text-[0.65rem] text-neutral-500">{relLabel}</p>
+    </div>
+  );
+}
