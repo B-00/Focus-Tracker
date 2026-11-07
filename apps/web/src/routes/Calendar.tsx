@@ -7,6 +7,7 @@ import {
   type SectionResponse,
   type TaskPriority,
   type TaskResponse,
+  type UpdateTaskRequest,
 } from '@focus-tracker/shared';
 import {
   createTask,
@@ -15,6 +16,7 @@ import {
   listTasks,
   sectionsQueryKeys,
   tasksQueryKeys,
+  updateTask,
 } from '../lib/tasks-api';
 import { PRIORITY_SORT_INDEX } from './tasks/PriorityBadge';
 import {
@@ -22,7 +24,7 @@ import {
   withAlpha,
 } from './tasks/priority-colors';
 
-// /calendar — Slices 1–3 (Calendar.md §5 / §3 / §4.1).
+// /calendar — Slices 1–4 (Calendar.md §5 / §3 / §4.1–§4.3).
 //
 // Scope now:
 //   - Month grid: 7 cols × 5–6 rows, Monday-first (§5.1).
@@ -32,13 +34,15 @@ import {
 //   - Per-cell hover tooltip listing the day's tasks (§3.3).
 //   - Click an empty area of a cell → inline composer with title +
 //     priority (required) + section + end-date toggle (§4.1).
-//   - Composer also lists the day's existing tasks with inline
-//     confirm-then-delete, mirroring the /tasks row pattern so users
-//     can prune a day without leaving the calendar.
+//   - Composer lists the day's existing tasks with inline
+//     confirm-then-delete, mirroring the /tasks row pattern.
+//   - Click a pill → same composer opens with that task's row expanded
+//     into an inline edit form (title, priority, section, start/end
+//     date, complete checkbox; Save / Cancel). Reuses `updateTask`
+//     so the change propagates to /tasks and dashboard widgets.
 //
 // Deferred (later slices):
 //   - Multi-day range bars that span cells (§3.1).
-//   - Click pill → edit popover (§4.2).
 //   - Server-side `?from=&to=` filtering — v1 personal data is small
 //     enough that fetching all dated tasks and filtering client-side is
 //     trivially fast. ponytail: single-user scale; upgrade path is to
@@ -70,6 +74,10 @@ export function CalendarPage() {
   // no cell is in compose mode; otherwise holds the YMD of the open cell.
   // Esc / click-outside / successful submit all clear it.
   const [composerDay, setComposerDay] = useState<string | null>(null);
+  // Optional: when the composer was opened by clicking a pill (Slice 4
+  // / §4.2), this holds the id of the task to pre-expand into edit mode.
+  // Null → composer opens with just the "new task" form focused.
+  const [editTaskId, setEditTaskId] = useState<string | null>(null);
 
   const sectionsQuery = useQuery({
     queryKey: sectionsQueryKeys.list(),
@@ -207,8 +215,20 @@ export function CalendarPage() {
                 sectionsById={sectionsById}
                 sections={sectionsQuery.data ?? []}
                 composerOpen={composerDay === ymd}
-                onOpenComposer={() => setComposerDay(ymd)}
-                onCloseComposer={() => setComposerDay(null)}
+                editTaskId={composerDay === ymd ? editTaskId : null}
+                onOpenComposer={() => {
+                  setComposerDay(ymd);
+                  setEditTaskId(null);
+                }}
+                onRequestEdit={(taskId) => {
+                  setComposerDay(ymd);
+                  setEditTaskId(taskId);
+                }}
+                onClearEdit={() => setEditTaskId(null)}
+                onCloseComposer={() => {
+                  setComposerDay(null);
+                  setEditTaskId(null);
+                }}
               />
             );
           })}
@@ -227,7 +247,10 @@ interface DayCellProps {
   sectionsById: Map<string, SectionResponse>;
   sections: SectionResponse[];
   composerOpen: boolean;
+  editTaskId: string | null;
   onOpenComposer: () => void;
+  onRequestEdit: (taskId: string) => void;
+  onClearEdit: () => void;
   onCloseComposer: () => void;
 }
 
@@ -240,7 +263,10 @@ function DayCell({
   sectionsById,
   sections,
   composerOpen,
+  editTaskId,
   onOpenComposer,
+  onRequestEdit,
+  onClearEdit,
   onCloseComposer,
 }: DayCellProps) {
   const dayNum = date.getDate();
@@ -300,6 +326,7 @@ function DayCell({
             key={t.id}
             task={t}
             section={t.sectionId ? sectionsById.get(t.sectionId) : undefined}
+            onClick={() => onRequestEdit(t.id)}
           />
         ))}
       </div>
@@ -317,6 +344,9 @@ function DayCell({
           sections={sections}
           tasks={tasks}
           sectionsById={sectionsById}
+          editTaskId={editTaskId}
+          onRequestEdit={onRequestEdit}
+          onClearEdit={onClearEdit}
           onClose={onCloseComposer}
         />
       )}
@@ -378,23 +408,32 @@ function DayTooltip({ dateLabel, tasks, sectionsById }: DayTooltipProps) {
 interface TaskPillProps {
   task: TaskResponse;
   section: SectionResponse | undefined;
+  onClick: () => void;
 }
 
-function TaskPill({ task, section }: TaskPillProps) {
+// A pill is a `<button>` so clicking it opens the composer in edit
+// mode for that task (Calendar.md §4.2). It intentionally does NOT
+// stopPropagation: the cell's handleCellClick already bails when
+// `e.target !== e.currentTarget`, and the document-level mousedown
+// listener on the current composer needs to fire first so it can
+// close an already-open composer before this click opens a new one.
+function TaskPill({ task, section, onClick }: TaskPillProps) {
   const priorityColors = usePriorityColors();
   const fill = section?.color ?? INBOX_COLOR;
   const priorityHex = priorityColors[task.priority];
   const sectionName = section?.name ?? 'Inbox';
   const glyph = PRIORITY_GLYPH[task.priority];
   const completed = task.completedAt !== null;
-  const ariaLabel = `${capitalize(task.priority)} priority — ${task.title} — ${sectionName}`;
+  const ariaLabel = `Edit ${capitalize(task.priority)} priority task — ${task.title} — ${sectionName}`;
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
       aria-label={ariaLabel}
       title={`${glyph} ${task.title} · ${sectionName}`}
       className={[
-        'flex items-center gap-1 overflow-hidden rounded border-l-2 px-1.5 py-0.5 text-[0.7rem]',
+        'flex w-full items-center gap-1 overflow-hidden rounded border-l-2 px-1.5 py-0.5 text-left text-[0.7rem] focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400',
         completed ? 'text-neutral-400 line-through opacity-70' : 'text-neutral-100',
       ].join(' ')}
       style={{
@@ -406,7 +445,7 @@ function TaskPill({ task, section }: TaskPillProps) {
         {glyph}
       </span>
       <span className="truncate">{task.title}</span>
-    </div>
+    </button>
   );
 }
 
@@ -437,6 +476,9 @@ interface CellComposerProps {
   sections: SectionResponse[];
   tasks: TaskResponse[];
   sectionsById: Map<string, SectionResponse>;
+  editTaskId: string | null;
+  onRequestEdit: (taskId: string) => void;
+  onClearEdit: () => void;
   onClose: () => void;
 }
 
@@ -446,6 +488,9 @@ function CellComposer({
   sections,
   tasks,
   sectionsById,
+  editTaskId,
+  onRequestEdit,
+  onClearEdit,
   onClose,
 }: CellComposerProps) {
   const qc = useQueryClient();
@@ -533,12 +578,16 @@ function CellComposer({
         </button>
       </div>
       {tasks.length > 0 && (
-        <ul className="mb-2 flex max-h-32 flex-col gap-0.5 overflow-y-auto border-b border-neutral-800 pb-2">
+        <ul className="mb-2 flex max-h-56 flex-col gap-0.5 overflow-y-auto border-b border-neutral-800 pb-2">
           {tasks.map((t) => (
             <ExistingTaskRow
               key={t.id}
               task={t}
               section={t.sectionId ? sectionsById.get(t.sectionId) : undefined}
+              sections={sections}
+              isEditing={editTaskId === t.id}
+              onEnterEdit={() => onRequestEdit(t.id)}
+              onClearEdit={onClearEdit}
             />
           ))}
         </ul>
@@ -628,20 +677,37 @@ function CellComposer({
 
 // -------------------------------------------------------------------
 // ExistingTaskRow — one row inside the composer listing tasks already
-// on the clicked day. Same confirm-then-delete affordance as the
-// /tasks TaskRow (click ✕ → Delete / Cancel) so the UX matches.
+// on the clicked day. Three mutually-exclusive modes:
 //
-// Local `confirming` state per row; successful delete just invalidates
-// the shared tasks cache — the row disappears on the next render.
-// Composer stays open so the user can delete more or create a new task.
+//   view:    glyph + title (clickable → enters edit) + ✕ (→ confirm)
+//   confirm: glyph + title + [Delete] [Cancel]  (delete affordance)
+//   edit:    inline form (title / priority+section / dates / complete /
+//            Save+Cancel). Controlled by parent via `isEditing` so a
+//            pill-click or another row's click can flip which row is
+//            being edited — EditTaskForm's useState resets naturally
+//            because the form only mounts while isEditing is true.
+//
+// Successful delete / save invalidate `tasksQueryKeys.all` so /tasks,
+// dashboard, and the calendar itself all re-sync.
 // -------------------------------------------------------------------
 
 interface ExistingTaskRowProps {
   task: TaskResponse;
   section: SectionResponse | undefined;
+  sections: SectionResponse[];
+  isEditing: boolean;
+  onEnterEdit: () => void;
+  onClearEdit: () => void;
 }
 
-function ExistingTaskRow({ task, section }: ExistingTaskRowProps) {
+function ExistingTaskRow({
+  task,
+  section,
+  sections,
+  isEditing,
+  onEnterEdit,
+  onClearEdit,
+}: ExistingTaskRowProps) {
   const qc = useQueryClient();
   const priorityColors = usePriorityColors();
   const [confirming, setConfirming] = useState(false);
@@ -653,6 +719,26 @@ function ExistingTaskRow({ task, section }: ExistingTaskRowProps) {
   });
   const completed = task.completedAt !== null;
   const sectionName = section?.name ?? 'Inbox';
+
+  // Edit and confirm modes are mutually exclusive — if the parent flips
+  // this row into edit mode mid-confirm, drop the confirm state.
+  useEffect(() => {
+    if (isEditing) setConfirming(false);
+  }, [isEditing]);
+
+  if (isEditing) {
+    return (
+      <li className="rounded bg-neutral-900/60 p-1.5">
+        <EditTaskForm
+          task={task}
+          sections={sections}
+          onCancel={onClearEdit}
+          onSaved={onClearEdit}
+        />
+      </li>
+    );
+  }
+
   return (
     <li
       className={`flex items-center gap-1.5 rounded px-1 py-0.5 ${
@@ -666,12 +752,15 @@ function ExistingTaskRow({ task, section }: ExistingTaskRowProps) {
       >
         {PRIORITY_GLYPH[task.priority]}
       </span>
-      <span
-        className="min-w-0 flex-1 truncate"
-        title={`${task.title} · ${sectionName}`}
+      <button
+        type="button"
+        onClick={onEnterEdit}
+        className="min-w-0 flex-1 truncate text-left hover:text-emerald-300 focus:outline-none focus-visible:text-emerald-300"
+        title={`Edit "${task.title}" · ${sectionName}`}
+        aria-label={`Edit "${task.title}"`}
       >
         {task.title}
-      </span>
+      </button>
       {confirming ? (
         <>
           <button
@@ -703,6 +792,173 @@ function ExistingTaskRow({ task, section }: ExistingTaskRowProps) {
         </button>
       )}
     </li>
+  );
+}
+
+// -------------------------------------------------------------------
+// EditTaskForm — inline form for editing a single existing dated task
+// (Calendar.md §4.2). Only mounts while its row is in edit mode, so
+// useState initializers snapshot the task's current values naturally.
+//
+// Save button submits via `updateTask`. Only sends fields the user
+// actually changed — avoids churning updatedAt on no-op saves.
+// -------------------------------------------------------------------
+
+interface EditTaskFormProps {
+  task: TaskResponse;
+  sections: SectionResponse[];
+  onCancel: () => void;
+  onSaved: () => void;
+}
+
+function EditTaskForm({ task, sections, onCancel, onSaved }: EditTaskFormProps) {
+  const qc = useQueryClient();
+  const [title, setTitle] = useState(task.title);
+  const [priority, setPriority] = useState<TaskPriority>(task.priority);
+  const [sectionId, setSectionId] = useState<string>(task.sectionId ?? '');
+  const [startDate, setStartDate] = useState<string>(task.startDate ?? '');
+  const [endDate, setEndDate] = useState<string>(task.endDate ?? task.startDate ?? '');
+  const [completed, setCompleted] = useState<boolean>(task.completedAt !== null);
+
+  const updateMutation = useMutation({
+    mutationFn: (body: UpdateTaskRequest) => updateTask(task.id, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: tasksQueryKeys.all });
+      onSaved();
+    },
+  });
+
+  const trimmed = title.trim();
+  const canSave = trimmed.length > 0 && !updateMutation.isPending;
+
+  function save() {
+    if (!canSave) return;
+    // Only send changed fields (updateTaskRequestSchema rejects empty
+    // objects, so we require at least one diff before firing).
+    const body: UpdateTaskRequest = {};
+    if (trimmed !== task.title) body.title = trimmed;
+    if (priority !== task.priority) body.priority = priority;
+    const nextSectionId = sectionId === '' ? null : sectionId;
+    if (nextSectionId !== task.sectionId) body.sectionId = nextSectionId;
+    if (startDate && startDate !== task.startDate) body.startDate = startDate;
+    const nextEndDate = endDate && endDate !== startDate ? endDate : null;
+    if (nextEndDate !== task.endDate) body.endDate = nextEndDate;
+    const wasCompleted = task.completedAt !== null;
+    if (completed !== wasCompleted) {
+      body.completedAt = completed ? new Date().toISOString() : null;
+    }
+    if (Object.keys(body).length === 0) {
+      // Nothing changed — silently close.
+      onSaved();
+      return;
+    }
+    updateMutation.mutate(body);
+  }
+
+  return (
+    // ponytail: <div>, not <form> — this is rendered INSIDE CellComposer's
+    // own <form>, and nested forms are invalid HTML (the inner is dropped,
+    // so onSubmit never fires + Save would submit the outer composer).
+    // Enter-to-save is handled by a keydown handler on the title input.
+    <div className="flex flex-col gap-1.5">
+      <input
+        autoFocus
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            save();
+          }
+        }}
+        maxLength={200}
+        aria-label="Task title"
+        className="w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 focus:border-emerald-500/50 focus:outline-none"
+      />
+      <div className="flex gap-1.5">
+        <select
+          value={priority}
+          onChange={(e) => setPriority(e.target.value as TaskPriority)}
+          aria-label="Priority"
+          className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-1.5 py-1 text-[0.7rem] text-neutral-200 focus:outline-none"
+        >
+          {TASK_PRIORITIES.slice().reverse().map((p) => (
+            <option key={p} value={p}>
+              {capitalize(p)}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sectionId}
+          onChange={(e) => setSectionId(e.target.value)}
+          aria-label="Section"
+          className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-1.5 py-1 text-[0.7rem] text-neutral-200 focus:outline-none"
+        >
+          <option value="">Inbox</option>
+          {sections.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-col gap-1 text-[0.65rem] text-neutral-400">
+        {/* Native date inputs are ~120px wide after the picker icon, so
+            two side-by-side don't fit the 256px composer — stack them. */}
+        <label className="flex items-center gap-1.5">
+          <span className="w-10 shrink-0">Start</span>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-1 py-0.5 text-neutral-200 focus:outline-none"
+          />
+        </label>
+        <label className="flex items-center gap-1.5">
+          <span className="w-10 shrink-0">End</span>
+          <input
+            type="date"
+            value={endDate}
+            min={startDate || undefined}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-1 py-0.5 text-neutral-200 focus:outline-none"
+          />
+        </label>
+      </div>
+      <label className="flex items-center gap-1.5 text-[0.7rem] text-neutral-300">
+        <input
+          type="checkbox"
+          checked={completed}
+          onChange={(e) => setCompleted(e.target.checked)}
+          className="h-3 w-3 accent-emerald-500"
+        />
+        <span>Completed</span>
+      </label>
+      <div className="flex items-center justify-end gap-1">
+        {updateMutation.isError && (
+          <span className="mr-auto text-[0.6rem] text-red-300">
+            {(updateMutation.error as Error).message}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={updateMutation.isPending}
+          className="rounded border border-neutral-700 bg-neutral-900 px-2 py-0.5 text-[0.65rem] text-neutral-300 hover:bg-neutral-800"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={save}
+          disabled={!canSave}
+          className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[0.65rem] font-medium text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+        >
+          {updateMutation.isPending ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
   );
 }
 
