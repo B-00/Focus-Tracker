@@ -5,7 +5,9 @@ import { fetchMeProfile, meQueryKeys } from '../../lib/me-api';
 import { computeLifeStats, parseBirthday } from '../../lib/life-math';
 import { useLifeColors } from '../../lib/life-colors';
 import { fetchMilestones, milestoneQueryKeys } from '../../lib/milestones-api';
+import type { Milestone } from '@focus-tracker/shared';
 import { MilestoneMarker } from '../life/MilestoneMarker';
+import { iconFor } from '../life/MilestonesSection';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
 import { WidgetReorderControls } from './WidgetReorderControls';
@@ -72,7 +74,10 @@ export function LifeStripWidget() {
           ) : !stats ? (
             <NoBirthdayHint />
           ) : (
-            <YearStrip stats={stats} />
+            <>
+              <YearStrip stats={stats} />
+              <ThisWeekReminders currentWeekIndex={stats.currentWeekIndex} />
+            </>
           )}
         </div>
       )}
@@ -174,4 +179,60 @@ function YearStrip({
       </p>
     </Link>
   );
+}
+
+// ---------------------------------------------------------------------------
+//  ThisWeekReminders — only renders when the current week has at least
+//  one milestone. Shares the milestones query cache with YearStrip + the
+//  /life grid + Settings → Memento Mori, so no extra round-trip.
+// ---------------------------------------------------------------------------
+
+const DATE_FMT = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+function ThisWeekReminders({ currentWeekIndex }: { currentWeekIndex: number }) {
+  const { data } = useQuery({
+    queryKey: milestoneQueryKeys.list(),
+    queryFn: fetchMilestones,
+    staleTime: 60_000,
+  });
+  const thisWeek = useMemo<Milestone[]>(
+    () => (data ?? []).filter((m) => m.weekIndex === currentWeekIndex),
+    [data, currentWeekIndex],
+  );
+  if (thisWeek.length === 0) return null;
+  return (
+    <section
+      aria-label="Milestone reminders for this week"
+      className="mt-3 border-t border-neutral-800 pt-3"
+    >
+      <h3 className="mb-1.5 text-[0.65rem] font-semibold uppercase tracking-widest text-neutral-400">
+        Milestone reminders
+      </h3>
+      <ul className="flex flex-col gap-1">
+        {thisWeek.map((m) => {
+          const Icon = iconFor(m.icon);
+          return (
+            <li key={m.id} className="flex items-center gap-2 text-xs">
+              <Icon size={14} style={{ color: m.color }} aria-hidden />
+              <span className="flex-1 truncate text-neutral-200" title={m.label}>
+                {m.label}
+              </span>
+              <span className="font-mono text-[0.65rem] text-neutral-500">
+                {DATE_FMT.format(parseYmd(m.targetDate))}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function parseYmd(s: string): Date {
+  const [y, mo, d] = s.split('-').map(Number);
+  return new Date(y!, mo! - 1, d!);
 }
