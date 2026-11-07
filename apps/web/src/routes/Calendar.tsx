@@ -27,7 +27,10 @@ import {
 // /calendar — Slices 1–5 (Calendar.md §5 / §3 / §4.1–§4.3).
 //
 // Scope now:
-//   - Month grid: 7 cols × 5–6 rows, Monday-first (§5.1).
+//   - Month grid: 7 cols × 4–6 rows, Sunday-first.
+//     (Calendar.md §5.1 originally called for Monday-first; user-
+//     requested override — Sunday-first matches the Google/Apple
+//     Calendar convention most of our users already live in.)
 //   - Prev / Next / Today header controls (§5).
 //   - Dated tasks render as bar segments inside their week row:
 //       - single-day tasks = 1-col-wide bar
@@ -76,7 +79,7 @@ const CELL_BAR_TOP_PX = 30;
 const CELL_BAR_BOTTOM_PX = 10;
 const CELL_MIN_HEIGHT_PX = 96; // = 6rem, matches slices 1–4
 
-const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const PRIORITY_GLYPH = {
   extreme: '▲▲',
@@ -1156,13 +1159,14 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-/// Build a 5- or 6-row month grid. First column is Monday
-/// (Calendar.md §5.1); leading days come from the previous month, trailing
-/// days from the next, so every row is 7 cells wide.
+/// Build a 4- to 6-row month grid. First column is Sunday (user
+/// preference — overrides Calendar.md §5.1 Monday-first default);
+/// leading days come from the previous month, trailing days from
+/// the next, so every row is 7 cells wide.
 function buildMonthGrid(cursor: Date): Date[] {
   const first = startOfMonth(cursor);
-  // JS: Sunday = 0 ... Saturday = 6. Monday-first → ((d + 6) % 7).
-  const leading = (first.getDay() + 6) % 7;
+  // JS: Sunday = 0 ... Saturday = 6. Sunday-first → use getDay() directly.
+  const leading = first.getDay();
   const gridStart = new Date(first);
   gridStart.setDate(first.getDate() - leading);
 
@@ -1228,7 +1232,7 @@ function groupIntoWeeks(days: Date[]): Date[][] {
 /// 1-col-wide segment.
 interface WeekSegment {
   task: TaskResponse;
-  /// 0-based column within the week (0 = Monday).
+  /// 0-based column within the week (0 = Sunday).
   startCol: number;
   /// 0-based inclusive end column.
   endCol: number;
@@ -1325,26 +1329,31 @@ function capitalize(s: string): string {
 
 // ---------------------------------------------------------------------
 // Dev self-check — grid math is the only non-trivial piece; if the
-// Monday-first shift or the 35-vs-42 cell count regress, every row
+// Sunday-first shift or the 28/35/42 cell count regress, every row
 // is wrong. Catch it on first import rather than through visual bugs.
 // ---------------------------------------------------------------------
 if (import.meta.env?.DEV) {
-  // Feb 2026 — starts Sunday, 28 days → leading=6, total=35.
+  // Feb 2026 — starts Sunday, 28 days → Sunday-first leading=0,
+  // total=28 (cleanly packs into 4 rows).
   const feb2026 = buildMonthGrid(new Date(2026, 1, 15));
-  if (feb2026.length !== 35) {
+  if (feb2026.length !== 28) {
     // eslint-disable-next-line no-console
-    console.warn('[calendar] expected 35 cells for Feb 2026, got', feb2026.length);
+    console.warn('[calendar] expected 28 cells for Feb 2026, got', feb2026.length);
   }
-  if (toYmd(feb2026[0]) !== '2026-01-26') {
+  if (toYmd(feb2026[0]) !== '2026-02-01') {
     // eslint-disable-next-line no-console
     console.warn('[calendar] Feb 2026 grid starts wrong:', toYmd(feb2026[0]));
   }
-  // May 2026 — starts Friday, 31 days → leading=4, cells 35 covers
-  // only through May 30 (needs 42).
+  // May 2026 — starts Friday, 31 days → Sunday-first leading=5,
+  // total=42 (first cell = Apr 26, Sun).
   const may2026 = buildMonthGrid(new Date(2026, 4, 15));
   if (may2026.length !== 42) {
     // eslint-disable-next-line no-console
     console.warn('[calendar] expected 42 cells for May 2026, got', may2026.length);
+  }
+  if (toYmd(may2026[0]) !== '2026-04-26') {
+    // eslint-disable-next-line no-console
+    console.warn('[calendar] May 2026 grid starts wrong:', toYmd(may2026[0]));
   }
   // Range expansion — inclusive, both ends.
   const range = eachDayInRangeInclusive('2026-02-27', '2026-03-02');
