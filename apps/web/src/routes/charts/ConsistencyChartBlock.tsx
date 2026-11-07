@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import {
   CHART_RANGE_DAYS,
   CHART_RANGE_PILLS,
-  CHART_RANGE_PILLS_COMPACT,
   chartsQueryKeys,
   fetchDatedGlobal,
   fetchRoutineGlobal,
@@ -35,8 +34,10 @@ interface Props {
   /// Height of the chart body in pixels. Defaults 240; dashboard
   /// variants pass a smaller value.
   height?: number;
-  /// Compact pill set (1M, 3M) for dashboard widgets. Full set
-  /// (1M, 3M, 6M, 1Y) elsewhere.
+  /// Dashboard widgets default the range pill to 1M (recent trend
+  /// matters most on the home surface); the /tasks top-of-page variant
+  /// defaults to 3M. The full 1D/1W/1M/3M/6M/1Y pill set is always
+  /// available either way.
   compact?: boolean;
   /// Right-side slot in the header (e.g. "Open tasks →" link on
   /// dashboard variants, or widget reorder controls).
@@ -72,7 +73,6 @@ export function ConsistencyChartBlock({
   const query = useChartQuery(scope, days, !collapsed);
 
   const resolvedColor = lineColor ?? defaultColorForScope(scope);
-  const pills = compact ? CHART_RANGE_PILLS_COMPACT : CHART_RANGE_PILLS;
 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
@@ -82,7 +82,7 @@ export function ConsistencyChartBlock({
             {title}
           </h3>
           {!collapsed && (
-            <ChartRangePills value={pill} onChange={setPill} options={pills} />
+            <ChartRangePills value={pill} onChange={setPill} options={CHART_RANGE_PILLS} />
           )}
         </div>
         {headerRight}

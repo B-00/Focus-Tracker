@@ -39,10 +39,6 @@ export const CHART_RANGE_DAYS: Record<ChartRangePill, number> = {
   '1Y': 365,
 };
 
-/// Dashboard widget variants omit 1Y per TaskCharts.md §3.4; use this
-/// tuple to render a compact pill row.
-export const CHART_RANGE_PILLS_COMPACT = ['1M', '3M'] as const;
-
 // ---------------------------------------------------------------------------
 //  Query keys
 // ---------------------------------------------------------------------------
