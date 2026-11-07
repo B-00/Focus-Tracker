@@ -112,15 +112,19 @@ export function Modal(props: ModalProps) {
   if (!open) return null;
 
   return createPortal(
+    // Single wrapper = backdrop + centering layout. Earlier the backdrop
+    // was a sibling <div class="absolute inset-0"> inside this wrapper,
+    // which meant a real user click at (x, y) hit the *backdrop* via
+    // the browser's hit-test — so `e.target` was the backdrop while
+    // `e.currentTarget` was the wrapper, and the equality check that
+    // gates backdrop-close never matched. Merging them so the wrapper
+    // both paints the dim AND owns the click target fixes the bug.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8"
-      // The backdrop layer — pointer-events go to the wrapper; clicks on
-      // the dialog itself stopPropagation below.
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (closeOnBackdropClick && e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" aria-hidden />
       <div
         ref={dialogRef}
         role="dialog"
