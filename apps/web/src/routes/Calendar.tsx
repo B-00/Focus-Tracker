@@ -24,25 +24,34 @@ import {
   withAlpha,
 } from './tasks/priority-colors';
 
-// /calendar — Slices 1–4 (Calendar.md §5 / §3 / §4.1–§4.3).
+// /calendar — Slices 1–5 (Calendar.md §5 / §3 / §4.1–§4.3).
 //
 // Scope now:
 //   - Month grid: 7 cols × 5–6 rows, Monday-first (§5.1).
 //   - Prev / Next / Today header controls (§5).
-//   - Single-day dated tasks render as pills in their day cell (§3.1).
+//   - Dated tasks render as bar segments inside their week row:
+//       - single-day tasks = 1-col-wide bar
+//       - multi-day tasks = N-col-wide bar, wrapped at week boundaries
+//         so a Nov 10 → Nov 25 task becomes 3 week-sized segments.
+//     Bars are absolute-positioned over a 7-col overlay grid so they
+//     span cells visually (gaps between cells are filled by the bar's
+//     own background).
+//   - Slot-packed vertical placement — a bar keeps the same slot across
+//     all the cells it spans within its week, so overlapping/adjacent
+//     bars never jump vertically mid-range.
+//   - "Continued" chevrons: ← prefix on bars whose range begins before
+//     the visible grid, → suffix on bars that extend past it.
 //   - Today cell visually distinct (§3.2).
 //   - Per-cell hover tooltip listing the day's tasks (§3.3).
 //   - Click an empty area of a cell → inline composer with title +
 //     priority (required) + section + end-date toggle (§4.1).
-//   - Composer lists the day's existing tasks with inline
-//     confirm-then-delete, mirroring the /tasks row pattern.
-//   - Click a pill → same composer opens with that task's row expanded
-//     into an inline edit form (title, priority, section, start/end
-//     date, complete checkbox; Save / Cancel). Reuses `updateTask`
-//     so the change propagates to /tasks and dashboard widgets.
+//   - Composer lists the day's INTERSECTING tasks (not just ones that
+//     start on that day) with inline confirm-then-delete.
+//   - Click a bar → same composer opens on the DAY YOU CLICKED (derived
+//     from the mouse x-position within the bar, not the bar's start)
+//     with that task's row expanded into an inline edit form.
 //
 // Deferred (later slices):
-//   - Multi-day range bars that span cells (§3.1).
 //   - Server-side `?from=&to=` filtering — v1 personal data is small
 //     enough that fetching all dated tasks and filtering client-side is
 //     trivially fast. ponytail: single-user scale; upgrade path is to
@@ -51,8 +60,21 @@ import {
 //
 // Data: reuses the shared `tasks` query key with `{kind: 'dated'}`, so
 // a dated-task change anywhere else (Dashboard, /tasks) invalidates
-// this surface for free. Create also hits the shared `createTask`
-// mutation so the server contract matches /tasks exactly.
+// this surface for free. Create / update / delete all hit the shared
+// mutations so the server contract matches /tasks exactly.
+
+// Bar rendering geometry — kept as integers so slot math is honest in
+// px rather than rem-rounding surprises. Tuned to match the current
+// text-[0.7rem] bar + 0.5 vertical padding that the pill had in slices
+// 1–4, so visual regression vs. the old pill is minimal.
+const BAR_HEIGHT_PX = 20;
+const BAR_SLOT_GAP_PX = 2;
+const BAR_SLOT_STEP_PX = BAR_HEIGHT_PX + BAR_SLOT_GAP_PX;
+// Space above slot 0: cell padding (p-1.5 = 6px) + date header + mb-1.
+const CELL_BAR_TOP_PX = 30;
+// Minimum breathing room below the last slot before cell padding.
+const CELL_BAR_BOTTOM_PX = 10;
+const CELL_MIN_HEIGHT_PX = 96; // = 6rem, matches slices 1–4
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -94,18 +116,22 @@ export function CalendarPage() {
     return map;
   }, [sectionsQuery.data]);
 
-  // Group single-day dated tasks by their YYYY-MM-DD. Multi-day tasks are
-  // deferred to Slice 5, but we still bin them by start-date so the user
-  // sees *something* on the start day rather than losing the task entirely.
+  // Group dated tasks by every day they INTERSECT (not just their start
+  // date). Multi-day tasks appear in each day of their range, so the
+  // composer's existing-tasks list and the hover tooltip both show a
+  // task on any day it's active.
   const tasksByDay = useMemo(() => {
     const map = new Map<string, TaskResponse[]>();
     for (const t of datedQuery.data ?? []) {
       if (t.inBacklog) continue; // Backlog has its own surface (Tasks.md §3.5)
-      const day = t.startDate;
-      if (!day) continue;
-      const bucket = map.get(day);
-      if (bucket) bucket.push(t);
-      else map.set(day, [t]);
+      if (!t.startDate) continue;
+      const end =
+        t.endDate && t.endDate >= t.startDate ? t.endDate : t.startDate;
+      for (const ymd of eachDayInRangeInclusive(t.startDate, end)) {
+        const bucket = map.get(ymd);
+        if (bucket) bucket.push(t);
+        else map.set(ymd, [t]);
+      }
     }
     // Priority DESC, then createdAt ASC (Calendar.md §3.1 sort rule).
     for (const bucket of map.values()) {
@@ -120,6 +146,13 @@ export function CalendarPage() {
   }, [datedQuery.data]);
 
   const monthDays = useMemo(() => buildMonthGrid(cursor), [cursor]);
+  const weeks = useMemo(() => groupIntoWeeks(monthDays), [monthDays]);
+  // Per-week packed bar segments. Reads from the raw task list so slot
+  // packing sees full task objects (endDate for continuesLeft/Right).
+  const weekBars = useMemo(
+    () => buildWeekSegments(weeks, datedQuery.data ?? []),
+    [weeks, datedQuery.data],
+  );
 
   const monthLabel = useMemo(
     () =>
@@ -193,56 +226,159 @@ export function CalendarPage() {
           ))}
         </div>
 
-        {/* Month grid */}
+        {/* Month grid — week rows stacked vertically. Each WeekRow owns
+            a 7-col backdrop of day cells plus an absolute-positioned
+            7-col overlay for bar segments spanning cells. */}
         <div
           role="grid"
           aria-label={`${monthLabel} calendar grid`}
-          className="mt-1 grid grid-cols-7 gap-1"
+          className="mt-1 flex flex-col gap-1"
         >
-          {monthDays.map((day) => {
-            const ymd = toYmd(day);
-            const inMonth = day.getMonth() === cursor.getMonth();
-            const today = isSameDay(day, new Date());
-            const tasks = tasksByDay.get(ymd) ?? [];
-            return (
-              <DayCell
-                key={ymd}
-                date={day}
-                ymd={ymd}
-                inMonth={inMonth}
-                today={today}
-                tasks={tasks}
-                sectionsById={sectionsById}
-                sections={sectionsQuery.data ?? []}
-                composerOpen={composerDay === ymd}
-                editTaskId={composerDay === ymd ? editTaskId : null}
-                onOpenComposer={() => {
-                  setComposerDay(ymd);
-                  setEditTaskId(null);
-                }}
-                onRequestEdit={(taskId) => {
-                  setComposerDay(ymd);
-                  setEditTaskId(taskId);
-                }}
-                onClearEdit={() => setEditTaskId(null)}
-                onCloseComposer={() => {
-                  setComposerDay(null);
-                  setEditTaskId(null);
-                }}
-              />
-            );
-          })}
+          {weeks.map((weekDays, weekIndex) => (
+            <WeekRow
+              key={toYmd(weekDays[0])}
+              weekDays={weekDays}
+              bars={weekBars[weekIndex]}
+              cursorMonth={cursor.getMonth()}
+              composerDay={composerDay}
+              editTaskId={editTaskId}
+              sectionsById={sectionsById}
+              sections={sectionsQuery.data ?? []}
+              tasksByDay={tasksByDay}
+              onOpenComposer={(ymd) => {
+                setComposerDay(ymd);
+                setEditTaskId(null);
+              }}
+              onRequestEdit={(ymd, taskId) => {
+                setComposerDay(ymd);
+                setEditTaskId(taskId);
+              }}
+              onClearEdit={() => setEditTaskId(null)}
+              onCloseComposer={() => {
+                setComposerDay(null);
+                setEditTaskId(null);
+              }}
+            />
+          ))}
         </div>
       </div>
     </main>
   );
 }
 
-interface DayCellProps {
+// -------------------------------------------------------------------
+// WeekRow — one row of 7 day cells plus an absolute-positioned overlay
+// of bar segments. Using an overlay instead of rendering bars inside
+// each cell lets a bar span multiple columns as one continuous element
+// (including over the inter-cell gap), which is the core of Slice 5.
+//
+// The overlay is a second grid-cols-7 container with the SAME gap as
+// the backdrop; bars use `gridColumnStart/End` to span columns and an
+// inline `top` to position in the right slot. `pointer-events-none`
+// on the overlay lets background clicks fall through to the cell
+// (opens composer); individual bars re-enable pointer events.
+//
+// Cell height is driven by this week's slotCount so cells only grow
+// as tall as the densest week needs — a sparse week stays compact.
+// -------------------------------------------------------------------
+
+interface WeekRowProps {
+  weekDays: Date[];
+  bars: WeekBars;
+  cursorMonth: number;
+  composerDay: string | null;
+  editTaskId: string | null;
+  sectionsById: Map<string, SectionResponse>;
+  sections: SectionResponse[];
+  tasksByDay: Map<string, TaskResponse[]>;
+  onOpenComposer: (ymd: string) => void;
+  onRequestEdit: (ymd: string, taskId: string) => void;
+  onClearEdit: () => void;
+  onCloseComposer: () => void;
+}
+
+function WeekRow({
+  weekDays,
+  bars,
+  cursorMonth,
+  composerDay,
+  editTaskId,
+  sectionsById,
+  sections,
+  tasksByDay,
+  onOpenComposer,
+  onRequestEdit,
+  onClearEdit,
+  onCloseComposer,
+}: WeekRowProps) {
+  const cellMinHeight = Math.max(
+    CELL_MIN_HEIGHT_PX,
+    CELL_BAR_TOP_PX + bars.slotCount * BAR_SLOT_STEP_PX + CELL_BAR_BOTTOM_PX,
+  );
+  return (
+    <div className="relative">
+      {/* Backdrop: 7 day cells */}
+      <div className="grid grid-cols-7 gap-1">
+        {weekDays.map((day) => {
+          const ymd = toYmd(day);
+          const inMonth = day.getMonth() === cursorMonth;
+          const today = isSameDay(day, new Date());
+          const tasks = tasksByDay.get(ymd) ?? [];
+          return (
+            <DayFrame
+              key={ymd}
+              date={day}
+              ymd={ymd}
+              inMonth={inMonth}
+              today={today}
+              minHeightPx={cellMinHeight}
+              tasks={tasks}
+              sectionsById={sectionsById}
+              sections={sections}
+              composerOpen={composerDay === ymd}
+              editTaskId={composerDay === ymd ? editTaskId : null}
+              onOpenComposer={() => onOpenComposer(ymd)}
+              onRequestEdit={(taskId) => onRequestEdit(ymd, taskId)}
+              onClearEdit={onClearEdit}
+              onCloseComposer={onCloseComposer}
+            />
+          );
+        })}
+      </div>
+      {/* Overlay: bar segments positioned over the backdrop grid. Same
+          `grid-cols-7 gap-1` so column widths & gaps line up exactly. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 grid grid-cols-7 gap-1"
+      >
+        {bars.segments.map((seg) => (
+          <BarSegment
+            key={`${seg.task.id}-${toYmd(weekDays[0])}`}
+            segment={seg}
+            weekDays={weekDays}
+            section={
+              seg.task.sectionId ? sectionsById.get(seg.task.sectionId) : undefined
+            }
+            onRequestEdit={onRequestEdit}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------
+// DayFrame — one day cell's background + date label + composer/tooltip.
+// Owns NO pills (bars live in the WeekRow overlay). Height is set
+// externally so every cell in a week row is uniform.
+// -------------------------------------------------------------------
+
+interface DayFrameProps {
   date: Date;
   ymd: string;
   inMonth: boolean;
   today: boolean;
+  minHeightPx: number;
   tasks: TaskResponse[];
   sectionsById: Map<string, SectionResponse>;
   sections: SectionResponse[];
@@ -254,11 +390,12 @@ interface DayCellProps {
   onCloseComposer: () => void;
 }
 
-function DayCell({
+function DayFrame({
   date,
   ymd,
   inMonth,
   today,
+  minHeightPx,
   tasks,
   sectionsById,
   sections,
@@ -268,43 +405,33 @@ function DayCell({
   onRequestEdit,
   onClearEdit,
   onCloseComposer,
-}: DayCellProps) {
+}: DayFrameProps) {
   const dayNum = date.getDate();
-  // `role="gridcell"` is required by the grid above. We also label the
-  // cell so screen readers announce "Today, June 12" per §3.2 / §8.
   const dateLabel = new Intl.DateTimeFormat(undefined, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
   }).format(date);
-  // ponytail: pure-CSS hover tooltip via `group` + opacity transition.
-  // Cheaper than the Life grid's rect-captured floating tooltip because
-  // a month grid is 42 cells max and the tooltip only needs to clear
-  // the cell it sits over — no viewport-edge drift worth solving.
   const hasTasks = tasks.length > 0;
   // Only open the composer when the user actually clicked the cell
-  // background. Pills + composer internals call stopPropagation so they
-  // don't wake the open handler (otherwise clicking a pill or typing in
-  // the composer would re-open or steal focus).
+  // background. Bars live in a sibling overlay and have their own
+  // click handler; the composer's internal clicks stopPropagation.
   function handleCellClick(e: React.MouseEvent<HTMLDivElement>) {
     if (composerOpen) return;
-    if (e.target !== e.currentTarget) {
-      // Clicked a child element; those are owned by pills / composer.
-      return;
-    }
+    if (e.target !== e.currentTarget) return;
     onOpenComposer();
   }
-  // ponytail: fade applies to in-flow children (date label + pills) only —
-  // putting opacity on the cell would bleed into the absolutely-positioned
-  // tooltip/composer and make them unreadable on leading/trailing month days.
+  // Fade only the date label for leading/trailing-month days. Bars
+  // overlaid on these cells stay crisp (they're siblings, not children).
   const fadeClass = inMonth ? '' : 'opacity-40';
   return (
     <div
       role="gridcell"
       aria-label={today ? `Today, ${dateLabel}` : dateLabel}
       onClick={handleCellClick}
+      style={{ minHeight: `${minHeightPx}px` }}
       className={[
-        'group relative min-h-[6rem] cursor-pointer rounded-md border p-1.5 text-xs',
+        'group relative cursor-pointer rounded-md border p-1.5 text-xs',
         today
           ? 'border-emerald-500/60 bg-emerald-500/5'
           : 'border-neutral-800 bg-neutral-900/30',
@@ -319,16 +446,6 @@ function DayCell({
         {today && (
           <span className="text-[0.6rem] uppercase tracking-wider">Today</span>
         )}
-      </div>
-      <div className={`flex flex-col gap-0.5 ${fadeClass}`}>
-        {tasks.map((t) => (
-          <TaskPill
-            key={t.id}
-            task={t}
-            section={t.sectionId ? sectionsById.get(t.sectionId) : undefined}
-            onClick={() => onRequestEdit(t.id)}
-          />
-        ))}
       </div>
       {hasTasks && !composerOpen && (
         <DayTooltip
@@ -405,46 +522,86 @@ function DayTooltip({ dateLabel, tasks, sectionsById }: DayTooltipProps) {
   );
 }
 
-interface TaskPillProps {
-  task: TaskResponse;
+interface BarSegmentProps {
+  segment: WeekSegment;
+  weekDays: Date[];
   section: SectionResponse | undefined;
-  onClick: () => void;
+  onRequestEdit: (ymd: string, taskId: string) => void;
 }
 
-// A pill is a `<button>` so clicking it opens the composer in edit
-// mode for that task (Calendar.md §4.2). It intentionally does NOT
-// stopPropagation: the cell's handleCellClick already bails when
-// `e.target !== e.currentTarget`, and the document-level mousedown
-// listener on the current composer needs to fire first so it can
-// close an already-open composer before this click opens a new one.
-function TaskPill({ task, section, onClick }: TaskPillProps) {
+// One bar segment overlaid on a WeekRow. A single-day task is just a
+// 1-col-wide bar; a multi-day task gets one BarSegment per week it
+// intersects. Rounded corners only on the "real" start/end of the
+// task's range; week-wrap edges are flat + show a continued chevron.
+//
+// Click handling: the clicked column within the segment is derived from
+// mouse x-position so clicking the middle of a 5-day bar opens the
+// composer on the day you actually clicked, not the bar's start.
+// ponytail: stopPropagation is intentionally OMITTED — matches how the
+// Slice 4 pill worked, so the open composer's click-outside listener
+// can close it before the new composer opens.
+function BarSegment({ segment, weekDays, section, onRequestEdit }: BarSegmentProps) {
   const priorityColors = usePriorityColors();
+  const { task, startCol, endCol, slot, continuesLeft, continuesRight } = segment;
   const fill = section?.color ?? INBOX_COLOR;
   const priorityHex = priorityColors[task.priority];
   const sectionName = section?.name ?? 'Inbox';
   const glyph = PRIORITY_GLYPH[task.priority];
   const completed = task.completedAt !== null;
-  const ariaLabel = `Edit ${capitalize(task.priority)} priority task — ${task.title} — ${sectionName}`;
+  const cellSpan = endCol - startCol + 1;
+  const ariaLabel = `Edit ${capitalize(task.priority)} priority task — ${task.title} — ${sectionName}${
+    cellSpan > 1 ? ` — ${cellSpan}-day range` : ''
+  }`;
+
+  function handleClick(e: React.MouseEvent<HTMLButtonElement>) {
+    // Figure out which column within the segment was clicked so the
+    // composer opens on THAT day, not the segment's start.
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    const colWidth = rect.width / cellSpan;
+    const localCol = Math.min(cellSpan - 1, Math.max(0, Math.floor(relX / colWidth)));
+    const dayYmd = toYmd(weekDays[startCol + localCol]);
+    onRequestEdit(dayYmd, task.id);
+  }
 
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={handleClick}
       aria-label={ariaLabel}
       title={`${glyph} ${task.title} · ${sectionName}`}
+      style={{
+        gridColumnStart: startCol + 1,
+        gridColumnEnd: endCol + 2,
+        marginTop: `${CELL_BAR_TOP_PX + slot * BAR_SLOT_STEP_PX}px`,
+        height: `${BAR_HEIGHT_PX}px`,
+        backgroundColor: withAlpha(fill, 0.35),
+        borderLeftColor: continuesLeft ? 'transparent' : priorityHex,
+        // Round only the "real" edges of the task's full range.
+        borderTopLeftRadius: continuesLeft ? 0 : '0.25rem',
+        borderBottomLeftRadius: continuesLeft ? 0 : '0.25rem',
+        borderTopRightRadius: continuesRight ? 0 : '0.25rem',
+        borderBottomRightRadius: continuesRight ? 0 : '0.25rem',
+      }}
       className={[
-        'flex w-full items-center gap-1 overflow-hidden rounded border-l-2 px-1.5 py-0.5 text-left text-[0.7rem] focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400',
+        'pointer-events-auto mx-px flex items-center gap-1 overflow-hidden border-l-2 px-1.5 text-left text-[0.7rem] focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400',
         completed ? 'text-neutral-400 line-through opacity-70' : 'text-neutral-100',
       ].join(' ')}
-      style={{
-        backgroundColor: withAlpha(fill, 0.25),
-        borderLeftColor: priorityHex,
-      }}
     >
+      {continuesLeft && (
+        <span aria-hidden className="shrink-0 text-neutral-400">
+          ←
+        </span>
+      )}
       <span aria-hidden className="shrink-0 font-semibold" style={{ color: priorityHex }}>
         {glyph}
       </span>
-      <span className="truncate">{task.title}</span>
+      <span className="flex-1 truncate">{task.title}</span>
+      {continuesRight && (
+        <span aria-hidden className="shrink-0 text-neutral-400">
+          →
+        </span>
+      )}
     </button>
   );
 }
@@ -826,6 +983,20 @@ function EditTaskForm({ task, sections, onCancel, onSaved }: EditTaskFormProps) 
       void qc.invalidateQueries({ queryKey: tasksQueryKeys.all });
       onSaved();
     },
+    // ponytail: if the task was deleted elsewhere (another tab, cache
+    // got stale between render and save), the PATCH returns 404. Just
+    // refetch — the stale row vanishes from the calendar and the form
+    // unmounts naturally. Cleaner than leaving an axios error on screen.
+    onError: (err: unknown) => {
+      const status =
+        typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { status?: number } }).response?.status
+          : undefined;
+      if (status === 404) {
+        void qc.invalidateQueries({ queryKey: tasksQueryKeys.all });
+        onSaved();
+      }
+    },
   });
 
   const trimmed = title.trim();
@@ -1019,6 +1190,135 @@ function toYmd(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
+/// Parse a YYYY-MM-DD date string into a local Date at midnight.
+/// Using the `T00:00:00` suffix anchors to local time so native Date
+/// arithmetic matches what the user sees on the grid; otherwise the
+/// string is parsed as UTC and shifts across day boundaries west of
+/// GMT.
+function parseYmd(ymd: string): Date {
+  return new Date(`${ymd}T00:00:00`);
+}
+
+/// Inclusive list of days between `start` and `end` as YYYY-MM-DD.
+/// If `end < start` returns just `[start]` (defensive — the composer
+/// clamps End ≥ Start, but data from the API has no such guarantee).
+function eachDayInRangeInclusive(startYmd: string, endYmd: string): string[] {
+  const out: string[] = [];
+  if (endYmd < startYmd) return [startYmd];
+  const cur = parseYmd(startYmd);
+  const end = parseYmd(endYmd);
+  while (cur.getTime() <= end.getTime()) {
+    out.push(toYmd(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+/// Chunk a flat day array (length always multiple of 7) into weeks.
+function groupIntoWeeks(days: Date[]): Date[][] {
+  const weeks: Date[][] = [];
+  for (let i = 0; i < days.length; i += 7) {
+    weeks.push(days.slice(i, i + 7));
+  }
+  return weeks;
+}
+
+/// A single bar segment inside one week row. A multi-week task produces
+/// one of these per week it intersects; a single-day task produces one
+/// 1-col-wide segment.
+interface WeekSegment {
+  task: TaskResponse;
+  /// 0-based column within the week (0 = Monday).
+  startCol: number;
+  /// 0-based inclusive end column.
+  endCol: number;
+  /// Row within the week's bar stack. Packed greedy by priority DESC,
+  /// then startCol ASC — see assignSlots below.
+  slot: number;
+  /// Task's range extends to days before this week.
+  continuesLeft: boolean;
+  /// Task's range extends to days after this week.
+  continuesRight: boolean;
+}
+
+/// Per-week packed segments plus how many slots were needed (drives
+/// the week's cell min-height).
+interface WeekBars {
+  segments: WeekSegment[];
+  slotCount: number;
+}
+
+/// Greedy slot packing within one week. Input segments are mutated
+/// in place to receive their `slot` number. Returns the total slot
+/// count used so the caller can size cell heights.
+///
+/// ponytail: greedy per-week, sorted by priority then start col. Not
+/// optimal packing, but a calendar is read top-to-bottom and the
+/// user expects higher-priority bars at the top. Optimal bin-packing
+/// is a known NP-hard problem; nobody needs that here.
+function assignSlots(segments: WeekSegment[]): number {
+  // Sort for display + packing: priority DESC (extreme on top), then
+  // startCol ASC, then stable by taskId as a tiebreaker.
+  segments.sort((a, b) => {
+    const pa = PRIORITY_SORT_INDEX[a.task.priority];
+    const pb = PRIORITY_SORT_INDEX[b.task.priority];
+    if (pa !== pb) return pa - pb;
+    if (a.startCol !== b.startCol) return a.startCol - b.startCol;
+    return a.task.id.localeCompare(b.task.id);
+  });
+  // slots[i] = highest endCol currently occupied in that slot, or -1.
+  const slotEndCols: number[] = [];
+  for (const seg of segments) {
+    let slotIdx = 0;
+    while (slotIdx < slotEndCols.length && slotEndCols[slotIdx] >= seg.startCol) {
+      slotIdx++;
+    }
+    if (slotIdx === slotEndCols.length) slotEndCols.push(seg.endCol);
+    else slotEndCols[slotIdx] = seg.endCol;
+    seg.slot = slotIdx;
+  }
+  return slotEndCols.length;
+}
+
+/// For each week, compute its packed bar segments. Tasks are matched
+/// against the week by YMD-string comparison (lexicographic order ==
+/// chronological for ISO dates, so no Date parsing needed in the hot
+/// path).
+function buildWeekSegments(
+  weeks: Date[][],
+  tasks: TaskResponse[],
+): WeekBars[] {
+  return weeks.map((weekDays) => {
+    const weekStartYmd = toYmd(weekDays[0]);
+    const weekEndYmd = toYmd(weekDays[6]);
+    const segments: WeekSegment[] = [];
+    for (const task of tasks) {
+      if (task.inBacklog) continue;
+      if (!task.startDate) continue;
+      const taskStart = task.startDate;
+      const taskEnd = task.endDate && task.endDate >= taskStart ? task.endDate : taskStart;
+      // Skip if entire task range is outside this week.
+      if (taskEnd < weekStartYmd || taskStart > weekEndYmd) continue;
+      // Clamp to the week and translate to 0-6 columns.
+      const segStartYmd = taskStart < weekStartYmd ? weekStartYmd : taskStart;
+      const segEndYmd = taskEnd > weekEndYmd ? weekEndYmd : taskEnd;
+      const startCol = weekDays.findIndex((d) => toYmd(d) === segStartYmd);
+      const endCol = weekDays.findIndex((d) => toYmd(d) === segEndYmd);
+      if (startCol === -1 || endCol === -1) continue; // defensive
+      segments.push({
+        task,
+        startCol,
+        endCol,
+        slot: 0,
+        continuesLeft: taskStart < weekStartYmd,
+        continuesRight: taskEnd > weekEndYmd,
+      });
+    }
+    const slotCount = assignSlots(segments);
+    return { segments, slotCount };
+  });
+}
+
 function capitalize(s: string): string {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
@@ -1045,5 +1345,31 @@ if (import.meta.env?.DEV) {
   if (may2026.length !== 42) {
     // eslint-disable-next-line no-console
     console.warn('[calendar] expected 42 cells for May 2026, got', may2026.length);
+  }
+  // Range expansion — inclusive, both ends.
+  const range = eachDayInRangeInclusive('2026-02-27', '2026-03-02');
+  const expected = ['2026-02-27', '2026-02-28', '2026-03-01', '2026-03-02'];
+  if (range.join(',') !== expected.join(',')) {
+    // eslint-disable-next-line no-console
+    console.warn('[calendar] range expansion wrong:', range);
+  }
+  // Slot packing — three bars with partial overlap. Expected slot
+  // layout (after priority-desc sort): A(high) slot 0 cols 0-3,
+  // B(mid) slot 1 cols 2-5, C(low) slot 0 cols 4-6 (reuses slot 0
+  // because A ends before C starts).
+  const mk = (id: string, pri: TaskPriority, startCol: number, endCol: number) => ({
+    task: { id, priority: pri, createdAt: id, startDate: '2026-01-01', endDate: null } as unknown as TaskResponse,
+    startCol,
+    endCol,
+    slot: 0,
+    continuesLeft: false,
+    continuesRight: false,
+  });
+  const segs: WeekSegment[] = [mk('C', 'low', 4, 6), mk('A', 'high', 0, 3), mk('B', 'mid', 2, 5)];
+  const slots = assignSlots(segs);
+  const byId = Object.fromEntries(segs.map((s) => [s.task.id, s.slot]));
+  if (slots !== 2 || byId.A !== 0 || byId.B !== 1 || byId.C !== 0) {
+    // eslint-disable-next-line no-console
+    console.warn('[calendar] slot packing wrong:', { slots, byId });
   }
 }
