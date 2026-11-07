@@ -75,6 +75,59 @@ export const lifeGridResponseSchema = z.object({
 export type LifeGridResponse = z.infer<typeof lifeGridResponseSchema>;
 
 // ---------------------------------------------------------------------------
+//  GET /v1/life/weeks/{weekIndex}   (MementoMori.md §5.1 / §5.2 / §7)
+//  PUT /v1/life/weeks/{weekIndex}/note
+// ---------------------------------------------------------------------------
+
+/// One entry in the "top N by durationMs" lists. `name` is the human-
+/// facing label — the app name for desktop telemetry, the domain for
+/// browser telemetry. Server guarantees the list is pre-sorted and
+/// capped at 3 entries.
+export const lifeWeekTopItemSchema = z.object({
+  name: z.string().min(1),
+  durationMs: z.number().int().nonnegative(),
+});
+export type LifeWeekTopItem = z.infer<typeof lifeWeekTopItemSchema>;
+
+/// WeekNote body + last-updated marker. `null` at the envelope level
+/// when no note has ever been written for the week.
+export const lifeWeekNoteSchema = z.object({
+  body: z.string().max(2000),
+  updatedAt: z.string(),     // ISO timestamp
+});
+export type LifeWeekNote = z.infer<typeof lifeWeekNoteSchema>;
+
+/// Full detail payload for one week. Everything the drawer renders.
+/// `isPast` collapses the past/current/future tri-state into a single
+/// bool so the client can gate the note editor without re-doing week
+/// math; the server owns the comparison against `currentWeekIndex`.
+export const lifeWeekDetailSchema = z.object({
+  weekIndex: z.number().int().nonnegative(),
+  startDate: z.string(),                          // yyyy-mm-dd (inclusive)
+  endDate: z.string(),                            // yyyy-mm-dd (inclusive)
+  isPast: z.boolean(),
+  isCurrent: z.boolean(),
+  telemetryMinutes: z.number().int().nonnegative(),
+  sessions: z.object({
+    count: z.number().int().nonnegative(),
+    totalEffectiveMs: z.number().int().nonnegative(),
+  }),
+  topApps: z.array(lifeWeekTopItemSchema).max(3),
+  topSites: z.array(lifeWeekTopItemSchema).max(3),
+  tasksCompleted: z.number().int().nonnegative(),
+  note: lifeWeekNoteSchema.nullable(),
+});
+export type LifeWeekDetail = z.infer<typeof lifeWeekDetailSchema>;
+
+/// PUT body. Empty string is a valid payload — the server treats it as
+/// a delete of the existing note. 2000 chars matches the DB column cap
+/// (schema.prisma WeekNote.body comment).
+export const lifeWeekNoteUpsertSchema = z.object({
+  body: z.string().max(2000),
+});
+export type LifeWeekNoteUpsert = z.infer<typeof lifeWeekNoteUpsertSchema>;
+
+// ---------------------------------------------------------------------------
 //  Runnable self-check (ponytail: single assert-based demo per the
 //  user rule). Run with `node packages/shared/dist/life.js`.
 // ---------------------------------------------------------------------------
@@ -112,6 +165,70 @@ function selfCheck(): void {
   if ('hasSessions' in parsed.weeks[0]!) {
     throw new Error('hasSessions should not survive the schema');
   }
+
+  // lifeWeekDetailSchema — round-trip a populated past week (with note)
+  // and a current-week variant (no note, isCurrent=true).
+  const pastWeek = lifeWeekDetailSchema.parse({
+    weekIndex: 1890,
+    startDate: '2026-03-02',
+    endDate: '2026-03-08',
+    isPast: true,
+    isCurrent: false,
+    telemetryMinutes: 2340,
+    sessions: { count: 4, totalEffectiveMs: 7_200_000 },
+    topApps: [
+      { name: 'Cursor', durationMs: 5_400_000 },
+      { name: 'Chrome', durationMs: 3_000_000 },
+    ],
+    topSites: [{ name: 'github.com', durationMs: 1_800_000 }],
+    tasksCompleted: 7,
+    note: { body: 'Shipped slice 2', updatedAt: '2026-03-10T10:00:00.000Z' },
+  });
+  assert(pastWeek.note?.body === 'Shipped slice 2', 'past week note round-trip');
+  assert(pastWeek.topApps.length === 2, 'topApps round-trip');
+
+  const currentWeek = lifeWeekDetailSchema.parse({
+    weekIndex: 1899,
+    startDate: '2026-09-28',
+    endDate: '2026-10-04',
+    isPast: false,
+    isCurrent: true,
+    telemetryMinutes: 180,
+    sessions: { count: 0, totalEffectiveMs: 0 },
+    topApps: [],
+    topSites: [],
+    tasksCompleted: 0,
+    note: null,
+  });
+  assert(currentWeek.note === null, 'current week note defaults to null');
+
+  // topApps cap of 3 is enforced
+  let threw = false;
+  try {
+    lifeWeekDetailSchema.parse({
+      ...pastWeek,
+      topApps: [
+        { name: 'a', durationMs: 1 },
+        { name: 'b', durationMs: 1 },
+        { name: 'c', durationMs: 1 },
+        { name: 'd', durationMs: 1 },
+      ],
+    });
+  } catch {
+    threw = true;
+  }
+  assert(threw, 'topApps length > 3 is rejected');
+
+  // Note body size cap
+  const okUpsert = lifeWeekNoteUpsertSchema.parse({ body: 'x'.repeat(2000) });
+  assert(okUpsert.body.length === 2000, '2000-char body OK');
+  let tooLong = false;
+  try {
+    lifeWeekNoteUpsertSchema.parse({ body: 'x'.repeat(2001) });
+  } catch {
+    tooLong = true;
+  }
+  assert(tooLong, '2001-char body rejected');
 
   console.log('life: self-check OK');
 }

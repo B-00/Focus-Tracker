@@ -248,11 +248,19 @@ export {
   lifeHeatmapTier,
   lifeGridWeekSchema,
   lifeGridResponseSchema,
+  lifeWeekTopItemSchema,
+  lifeWeekNoteSchema,
+  lifeWeekDetailSchema,
+  lifeWeekNoteUpsertSchema,
 } from './life.js';
 export type {
   LifeHeatmapTier,
   LifeGridWeek,
   LifeGridResponse,
+  LifeWeekTopItem,
+  LifeWeekNote,
+  LifeWeekDetail,
+  LifeWeekNoteUpsert,
 } from './life.js';
 
 // ---------------------------------------------------------------------------

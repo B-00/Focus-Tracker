@@ -4,6 +4,7 @@ import {
   useMemo,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { Link } from '@tanstack/react-router';
@@ -17,6 +18,7 @@ import { LIFE_SIZE_PRESETS, useLifeSize } from '../lib/life-size';
 import { LifeColorPicker } from './life/LifeColorPicker';
 import { LifeSizePicker } from './life/LifeSizePicker';
 import { LifeHeatmapColorPicker } from './life/LifeHeatmapColorPicker';
+import { LifeWeekModal } from './life/LifeWeekModal';
 
 // /life — Memento Mori life calendar (MementoMori.md §3.1).
 //
@@ -175,6 +177,19 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
   }, []);
   const onGridLeave = useCallback(() => setHover(null), []);
 
+  // Click-to-open-week modal state (MementoMori.md §5.1 / §5.2). Only
+  // past or current cells open — future cells are reserved for Slice 4
+  // (milestone popover, §5.3). Click handler is useCallback'd so the
+  // memo'd DecadeRow / HalfGrid subtrees don't re-render on each open.
+  const [openWeekIndex, setOpenWeekIndex] = useState<number | null>(null);
+  const onCellActivate = useCallback<HalfGridCellActivate>(
+    (idx) => {
+      if (idx <= current) setOpenWeekIndex(idx);
+    },
+    [current],
+  );
+  const onCloseWeek = useCallback(() => setOpenWeekIndex(null), []);
+
   // Chunk the years into decade blocks. Last block may be short if
   // lifeExpectancyYears isn't a multiple of 10 (e.g. 85 → 8 full + 1 half).
   const decades = useMemo(() => {
@@ -261,16 +276,17 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
             <div>
               <WeekAxisTop />
               <div className="flex flex-col" style={{ gap: 'var(--block-gap)' }}>
-                {decades.map(({ startYear, yearsInDecade }, decadeIdx) => (
-                  <DecadeRow
-                    key={decadeIdx}
-                    startYear={startYear}
-                    yearsInDecade={yearsInDecade}
-                    currentWeekIndex={current}
-                    gridData={gridData}
-                    onCellHover={onCellHover}
-                  />
-                ))}
+              {decades.map(({ startYear, yearsInDecade }, decadeIdx) => (
+                <DecadeRow
+                  key={decadeIdx}
+                  startYear={startYear}
+                  yearsInDecade={yearsInDecade}
+                  currentWeekIndex={current}
+                  gridData={gridData}
+                  onCellHover={onCellHover}
+                  onCellActivate={onCellActivate}
+                />
+              ))}
               </div>
             </div>
           </div>
@@ -301,6 +317,8 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
           payload={gridData.get(hover.idx) ?? null}
         />
       )}
+
+      <LifeWeekModal weekIndex={openWeekIndex} onClose={onCloseWeek} />
     </main>
   );
 }
@@ -433,6 +451,8 @@ interface HoverState {
 /// Shared cell-hover callback signature. useCallback'd at LifeGrid and
 /// threaded down so React.memo on DecadeRow + HalfGrid holds.
 type HalfGridCellHover = (idx: number, rect: HoverRect) => void;
+/// Click / Enter / Space activation — opens the per-week detail modal.
+type HalfGridCellActivate = (idx: number) => void;
 
 interface DecadeRowProps {
   startYear: number;
@@ -440,6 +460,7 @@ interface DecadeRowProps {
   currentWeekIndex: number;
   gridData: GridDataMap;
   onCellHover: HalfGridCellHover;
+  onCellActivate: HalfGridCellActivate;
 }
 
 const DecadeRow = memo(function DecadeRow({
@@ -448,6 +469,7 @@ const DecadeRow = memo(function DecadeRow({
   currentWeekIndex,
   gridData,
   onCellHover,
+  onCellActivate,
 }: DecadeRowProps) {
   return (
     <div className="flex" style={{ gap: 'var(--block-gap)' }}>
@@ -459,6 +481,7 @@ const DecadeRow = memo(function DecadeRow({
         currentWeekIndex={currentWeekIndex}
         gridData={gridData}
         onCellHover={onCellHover}
+        onCellActivate={onCellActivate}
       />
       <HalfGrid
         startYear={startYear}
@@ -468,6 +491,7 @@ const DecadeRow = memo(function DecadeRow({
         currentWeekIndex={currentWeekIndex}
         gridData={gridData}
         onCellHover={onCellHover}
+        onCellActivate={onCellActivate}
       />
     </div>
   );
@@ -481,6 +505,7 @@ interface HalfGridProps {
   currentWeekIndex: number;
   gridData: GridDataMap;
   onCellHover: HalfGridCellHover;
+  onCellActivate: HalfGridCellActivate;
 }
 
 const HalfGrid = memo(function HalfGrid({
@@ -491,6 +516,7 @@ const HalfGrid = memo(function HalfGrid({
   currentWeekIndex,
   gridData,
   onCellHover,
+  onCellActivate,
 }: HalfGridProps) {
   // Default grid-auto-flow is 'row' — iterate year (row) first, then week
   // (col). DOM order matches visual order so no explicit grid-row/column
@@ -516,6 +542,14 @@ const HalfGrid = memo(function HalfGrid({
     const r = e.currentTarget.getBoundingClientRect();
     onCellHover(idx, { left: r.left, top: r.top, width: r.width, height: r.height });
   };
+  const handleClick = (idx: number) => () => onCellActivate(idx);
+  const handleKey = (idx: number) => (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    // Enter / Space open the per-week modal; matches §8 keyboard spec.
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onCellActivate(idx);
+    }
+  };
 
   return (
     <div
@@ -537,19 +571,26 @@ const HalfGrid = memo(function HalfGrid({
         const isPast = idx < currentWeekIndex;
         const payload = isPast ? gridData.get(idx) : undefined;
         const bg = resolveCellBg(isCurrent, isPast, payload);
+        // Past + current cells are activatable (open the per-week
+        // modal). Future cells are inert in Slice 3 — milestone
+        // popover (§5.3) is Slice 4 territory.
+        const activatable = isPast || isCurrent;
         return (
           <div
             key={idx}
             role="gridcell"
             aria-label={cellAriaLabel(year, week, isCurrent, payload)}
+            tabIndex={activatable ? 0 : -1}
             onMouseEnter={handleEnter(idx)}
-            className={
+            onClick={activatable ? handleClick(idx) : undefined}
+            onKeyDown={activatable ? handleKey(idx) : undefined}
+            className={`${
               isCurrent
                 ? 'rounded-[1px] ring-1 ring-emerald-200 shadow-[0_0_6px_rgba(52,211,153,0.6)]'
                 : isPast
                   ? 'rounded-[1px]'
                   : 'rounded-[1px] border border-neutral-800'
-            }
+            }${activatable ? ' cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-300/70' : ''}`}
             style={{ backgroundColor: bg }}
           />
         );
@@ -595,7 +636,7 @@ function cellAriaLabel(
 // cursor glyph (usually 20–30px) so the tooltip doesn't sit on top of
 // the arrow. 40px lands the tooltip a comfortable distance above the
 // hovered cell on every size preset.
-const TOOLTIP_GAP = 40;
+const TOOLTIP_GAP = 20;
 
 const DATE_FMT = new Intl.DateTimeFormat(undefined, {
   month: 'short',
