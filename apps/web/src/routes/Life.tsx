@@ -21,7 +21,7 @@ import { LifeHeatmapColorPicker } from './life/LifeHeatmapColorPicker';
 import { LifeWeekModal } from './life/LifeWeekModal';
 import { LifeWeekFutureModal } from './life/LifeWeekFutureModal';
 import { fetchMilestones, milestoneQueryKeys } from '../lib/milestones-api';
-import { iconFor } from './life/MilestonesSection';
+import { MilestoneMarker } from './life/MilestoneMarker';
 import type { Milestone } from '@focus-tracker/shared';
 
 // /life — Memento Mori life calendar (MementoMori.md §3.1).
@@ -636,52 +636,11 @@ const HalfGrid = memo(function HalfGrid({
             style={{ backgroundColor: bg }}
           >
             {weekMilestones && weekMilestones.length > 0 && (
-              <MilestoneMarker milestones={weekMilestones} />
+              <MilestoneMarker count={weekMilestones.length} />
             )}
           </div>
         );
       })}
-    </div>
-  );
-});
-
-// ---------------------------------------------------------------------------
-//  MilestoneMarker — corner overlay rendered on top of each cell
-//  (MementoMori.md §4.4). Up to 3 stacked icons; "+N" pill beyond that.
-//  pointer-events-none so the cell's click target remains the parent.
-// ---------------------------------------------------------------------------
-
-const MilestoneMarker = memo(function MilestoneMarker({
-  milestones,
-}: {
-  milestones: Milestone[];
-}) {
-  const visible = milestones.slice(0, 3);
-  const extra = milestones.length - visible.length;
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute -right-0.5 -top-0.5 flex items-center gap-px"
-    >
-      {visible.map((m) => {
-        const Icon = iconFor(m.icon);
-        return (
-          <span
-            key={m.id}
-            className="flex h-2.5 w-2.5 items-center justify-center rounded-full ring-1 ring-black/40"
-            style={{ backgroundColor: m.color }}
-          >
-            <Icon size={6} className="text-black/70" strokeWidth={3} />
-          </span>
-        );
-      })}
-      {extra > 0 && (
-        <span
-          className="flex min-w-[0.7rem] items-center justify-center rounded-full bg-neutral-200 px-0.5 text-[0.45rem] font-semibold text-neutral-900 ring-1 ring-black/40"
-        >
-          +{extra}
-        </span>
-      )}
     </div>
   );
 });

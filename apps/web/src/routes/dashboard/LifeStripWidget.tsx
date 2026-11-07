@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchMeProfile, meQueryKeys } from '../../lib/me-api';
 import { computeLifeStats, parseBirthday } from '../../lib/life-math';
 import { useLifeColors } from '../../lib/life-colors';
+import { fetchMilestones, milestoneQueryKeys } from '../../lib/milestones-api';
+import { MilestoneMarker } from '../life/MilestoneMarker';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
 import { WidgetReorderControls } from './WidgetReorderControls';
@@ -112,6 +114,26 @@ function YearStrip({
   const cells: number[] = [];
   for (let c = 0; c < 52; c++) cells.push(yearStart + c);
 
+  // Milestones are shared with /life and Settings; this query hits the
+  // same cache key so there's no extra round-trip when any of those
+  // pages has already loaded them.
+  const { data: milestones } = useQuery({
+    queryKey: milestoneQueryKeys.list(),
+    queryFn: fetchMilestones,
+    staleTime: 60_000,
+  });
+  const countsInYear = useMemo(() => {
+    const m = new Map<number, number>();
+    if (!milestones) return m;
+    const yearEnd = yearStart + 52;
+    for (const row of milestones) {
+      if (row.weekIndex >= yearStart && row.weekIndex < yearEnd) {
+        m.set(row.weekIndex, (m.get(row.weekIndex) ?? 0) + 1);
+      }
+    }
+    return m;
+  }, [milestones, yearStart]);
+
   return (
     <Link
       to="/life"
@@ -135,12 +157,15 @@ function YearStrip({
             : isPast
               ? colors.lived
               : colors.remaining;
+          const count = countsInYear.get(idx) ?? 0;
           return (
             <div
               key={idx}
-              className="rounded-[1px]"
+              className="relative rounded-[1px]"
               style={{ backgroundColor: bg }}
-            />
+            >
+              {count > 0 && <MilestoneMarker count={count} size={8} />}
+            </div>
           );
         })}
       </div>
