@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { logoutAll as apiLogoutAll } from '../lib/auth-api';
 import { useAuthStore } from '../stores/auth-store';
 import { DevicesSection } from './settings/DevicesSection';
+import { MementoMoriSection } from './settings/MementoMoriSection';
 import { ProfileSection } from './settings/ProfileSection';
 
 // /settings — left-rail tab layout per Settings.md §3.1.
@@ -153,6 +154,8 @@ export function SettingsPage() {
             <DevicesSection />
           ) : activeId === 'profile' ? (
             <ProfileSection email={email} />
+          ) : activeId === 'memento-mori' ? (
+            <MementoMoriSection />
           ) : (
             <StubSection label={activeLabel} />
           )}

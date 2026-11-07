@@ -91,11 +91,17 @@ const COLOR_PRESETS = [
 ];
 
 export interface MilestonesSectionProps {
-  weekIndex: number;
-  /// yyyy-mm-dd. Used as the default targetDate for new milestones;
-  /// users can pick a specific day later (edit form) if they want.
-  weekStartDate: string;
+  /// When provided, the list filters to this week only and new-milestone
+  /// forms seed the date from `weekStartDate`. When omitted (Settings
+  /// §4.2), the list shows ALL milestones sorted by target date asc —
+  /// the single canonical management surface.
+  weekIndex?: number;
+  /// yyyy-mm-dd. Used as the default targetDate for new milestones when
+  /// in per-week mode. In all-milestones mode, defaults to today.
+  weekStartDate?: string;
 }
+
+const TODAY_YMD = (): string => new Date().toISOString().slice(0, 10);
 
 export function MilestonesSection({
   weekIndex,
@@ -107,13 +113,23 @@ export function MilestonesSection({
     staleTime: 30_000,
   });
 
+  const scoped = weekIndex !== undefined;
   const milestones = useMemo(() => {
     const all = query.data ?? [];
-    return all.filter((m) => m.weekIndex === weekIndex);
-  }, [query.data, weekIndex]);
+    if (scoped) return all.filter((m) => m.weekIndex === weekIndex);
+    // All-milestones mode: sort by target date asc so the user reads
+    // them in life-timeline order (Settings.md §4.2).
+    return [...all].sort((a, b) => a.targetDate.localeCompare(b.targetDate));
+  }, [query.data, scoped, weekIndex]);
+
+  const defaultDate = weekStartDate ?? TODAY_YMD();
 
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const emptyLabel = scoped
+    ? 'No milestones for this week yet.'
+    : 'No milestones yet. Add one to mark a week on your life grid.';
 
   return (
     <section>
@@ -137,7 +153,7 @@ export function MilestonesSection({
       )}
 
       {milestones.length === 0 && !adding && !query.isLoading && (
-        <p className="text-xs text-neutral-500">No milestones for this week yet.</p>
+        <p className="text-xs text-neutral-500">{emptyLabel}</p>
       )}
 
       <ul className="flex flex-col gap-1.5">
@@ -146,7 +162,7 @@ export function MilestonesSection({
             <li key={m.id}>
               <MilestoneForm
                 initial={m}
-                weekStartDate={weekStartDate}
+                defaultDate={defaultDate}
                 onCancel={() => setEditingId(null)}
                 onSaved={() => setEditingId(null)}
               />
@@ -155,6 +171,7 @@ export function MilestonesSection({
             <li key={m.id}>
               <MilestoneRow
                 milestone={m}
+                showDate={!scoped}
                 onEdit={() => setEditingId(m.id)}
               />
             </li>
@@ -166,7 +183,7 @@ export function MilestonesSection({
         <div className="mt-2">
           <MilestoneForm
             initial={null}
-            weekStartDate={weekStartDate}
+            defaultDate={defaultDate}
             onCancel={() => setAdding(false)}
             onSaved={() => setAdding(false)}
           />
@@ -182,9 +199,11 @@ export function MilestonesSection({
 
 function MilestoneRow({
   milestone,
+  showDate,
   onEdit,
 }: {
   milestone: Milestone;
+  showDate: boolean;
   onEdit: () => void;
 }) {
   const qc = useQueryClient();
@@ -203,6 +222,14 @@ function MilestoneRow({
       <span className="flex-1 truncate text-xs text-neutral-200" title={milestone.label}>
         {milestone.label}
       </span>
+      {showDate && (
+        <span
+          className="shrink-0 font-mono text-[0.65rem] text-neutral-500"
+          title={milestone.targetDate}
+        >
+          {milestone.targetDate}
+        </span>
+      )}
       <button
         type="button"
         onClick={onEdit}
@@ -230,12 +257,12 @@ function MilestoneRow({
 
 function MilestoneForm({
   initial,
-  weekStartDate,
+  defaultDate,
   onCancel,
   onSaved,
 }: {
   initial: Milestone | null;
-  weekStartDate: string;
+  defaultDate: string;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -244,7 +271,7 @@ function MilestoneForm({
   const [color, setColor] = useState(initial?.color ?? COLOR_PRESETS[0]!);
   const [icon, setIcon] = useState<string>(initial?.icon ?? 'MilestoneIcon');
   const [targetDate, setTargetDate] = useState(
-    initial?.targetDate ?? weekStartDate,
+    initial?.targetDate ?? defaultDate,
   );
   const [error, setError] = useState<string | null>(null);
 
@@ -398,7 +425,7 @@ function ColorPicker({
         />
         <span
           aria-hidden
-          className="absolute inset-0 flex items-center justify-center text-[0.55rem] text-neutral-400"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center text-[0.55rem] text-neutral-400"
         >
           +
         </span>
