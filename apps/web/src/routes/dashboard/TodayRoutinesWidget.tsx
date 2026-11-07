@@ -16,7 +16,7 @@ import { PRIORITY_SORT_INDEX, PriorityBadge } from '../tasks/PriorityBadge';
 import { usePriorityColors, withAlpha } from '../tasks/priority-colors';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
-import { WidgetReorderControls } from './WidgetReorderControls';
+import { WidgetDragHandle } from './SortableWidget';
 
 // Dashboard widget — "Today's Routines". Mirrors TodayTasksWidget but
 // scoped to today's routine instances only. Split from the merged
@@ -79,7 +79,7 @@ export function TodayRoutinesWidget() {
           <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
             Today's routines
           </h2>
-          <WidgetReorderControls id="today_routines" />
+          <WidgetDragHandle />
           <WidgetCollapseToggle id="today_routines" controlsId={BODY_ID} />
         </div>
         <Link

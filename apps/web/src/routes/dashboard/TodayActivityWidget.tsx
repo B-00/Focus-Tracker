@@ -8,7 +8,7 @@ import { formatDuration } from '../../lib/format-duration';
 import { TopTargetsList } from '../activity/TopTargetsList';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
-import { WidgetReorderControls } from './WidgetReorderControls';
+import { WidgetDragHandle } from './SortableWidget';
 
 // Compact dashboard widget — "Today's activity" (Activity.md §4.2).
 //
@@ -41,7 +41,7 @@ export function TodayActivityWidget() {
           <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
             Today's activity
           </h2>
-          <WidgetReorderControls id="today_activity" />
+          <WidgetDragHandle />
           <WidgetCollapseToggle id="today_activity" controlsId={BODY_ID} />
         </div>
         <Link

@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { ConsistencyChartBlock } from '../charts/ConsistencyChartBlock';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
-import { WidgetReorderControls } from './WidgetReorderControls';
+import { WidgetDragHandle } from './SortableWidget';
 
 // Dashboard widget — global dated consistency chart (TaskCharts.md
 // §3.4). Mirror of RoutineChartWidget with the dated series.
@@ -21,7 +21,7 @@ export function DatedChartWidget() {
       bodyId={BODY_ID}
       headerRight={
         <div className="flex items-center gap-3">
-          <WidgetReorderControls id="dated_chart" />
+          <WidgetDragHandle />
           <WidgetCollapseToggle id="dated_chart" controlsId={BODY_ID} />
           <Link
             to="/tasks"

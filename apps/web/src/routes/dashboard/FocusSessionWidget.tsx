@@ -9,7 +9,7 @@ import { SessionSummaryModal } from '../focus/SessionSummaryModal';
 import { StartSessionForm } from '../focus/StartSessionForm';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
-import { WidgetReorderControls } from './WidgetReorderControls';
+import { WidgetDragHandle } from './SortableWidget';
 
 const BODY_ID = 'widget-focus-session-body';
 
@@ -43,7 +43,7 @@ export function FocusSessionWidget() {
           <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
             Focus Session
           </h2>
-          <WidgetReorderControls id="focus_session" />
+          <WidgetDragHandle />
           <WidgetCollapseToggle id="focus_session" controlsId={BODY_ID} />
         </div>
         <Link

@@ -11,7 +11,7 @@ import { PRIORITY_SORT_INDEX, PriorityBadge } from '../tasks/PriorityBadge';
 import { usePriorityColors, withAlpha } from '../tasks/priority-colors';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
-import { WidgetReorderControls } from './WidgetReorderControls';
+import { WidgetDragHandle } from './SortableWidget';
 
 // Dashboard widget — "Today's Tasks". Compact list of dated tasks where
 // today ∈ [startDate, endDate] AND not backlogged. Routines live in
@@ -68,7 +68,7 @@ export function TodayTasksWidget() {
           <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
             Today's tasks
           </h2>
-          <WidgetReorderControls id="today_tasks" />
+          <WidgetDragHandle />
           <WidgetCollapseToggle id="today_tasks" controlsId={BODY_ID} />
         </div>
         <Link

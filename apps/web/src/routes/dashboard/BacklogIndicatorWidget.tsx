@@ -5,7 +5,7 @@ import { backlogQueryKeys, listBacklog } from '../../lib/tasks-api';
 import { usePriorityColors } from '../tasks/priority-colors';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
-import { WidgetReorderControls } from './WidgetReorderControls';
+import { WidgetDragHandle } from './SortableWidget';
 
 // Dashboard widget — "Backlog indicator" (Tasks.md §4.2 item 3 /
 // Dashboard.md §3 `backlog`). Conditional render: hidden entirely when
@@ -51,7 +51,7 @@ export function BacklogIndicatorWidget() {
           <h2 className="text-sm font-medium uppercase tracking-wider text-amber-300">
             Backlog
           </h2>
-          <WidgetReorderControls id="backlog" />
+          <WidgetDragHandle />
           <WidgetCollapseToggle id="backlog" controlsId={BODY_ID} />
           <span className="text-xs text-amber-400/80">
             {total} task{total === 1 ? '' : 's'} missed

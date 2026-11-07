@@ -2,19 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { logoutAll as apiLogoutAll } from '../lib/auth-api';
 import { useAuthStore } from '../stores/auth-store';
+import { AboutSection } from './settings/AboutSection';
+import { DashboardSection } from './settings/DashboardSection';
 import { DevicesSection } from './settings/DevicesSection';
 import { MementoMoriSection } from './settings/MementoMoriSection';
 import { ProfileSection } from './settings/ProfileSection';
+import { TelemetrySection } from './settings/TelemetrySection';
 
 // /settings — left-rail tab layout per Settings.md §3.1.
 // Each tab has a kebab-case `#anchor` ID; loading /settings#devices lands
 // the user directly on Devices. Hash updates use replaceState so back
 // button isn't cluttered (per spec).
 //
-// v1-of-this-slice scope: only the Devices tab is implemented. The other
-// five tabs (Profile, Memento Mori, Dashboard, Telemetry, About) are
-// stub panels with a "Coming soon" message so the rail looks right and
-// future slices can swap them in without re-laying-out the page.
+// All six tabs are implemented: Profile, Memento Mori, Dashboard,
+// Devices, Telemetry, About. Each section component lives under
+// ./settings/ and owns its own data + save semantics.
 
 type SectionId =
   | 'profile'
@@ -156,23 +158,16 @@ export function SettingsPage() {
             <ProfileSection email={email} />
           ) : activeId === 'memento-mori' ? (
             <MementoMoriSection />
-          ) : (
-            <StubSection label={activeLabel} />
-          )}
+          ) : activeId === 'dashboard' ? (
+            <DashboardSection />
+          ) : activeId === 'telemetry' ? (
+            <TelemetrySection />
+          ) : activeId === 'about' ? (
+            <AboutSection />
+          ) : null}
         </section>
       </div>
     </main>
-  );
-}
-
-function StubSection({ label }: { label: string }) {
-  return (
-    <div>
-      <h2 className="text-lg font-semibold tracking-tight">{label}</h2>
-      <p className="mt-2 text-sm text-neutral-400">
-        Not implemented yet. Tracking in <span className="font-mono text-neutral-300">Settings.md</span>.
-      </p>
-    </div>
   );
 }
 

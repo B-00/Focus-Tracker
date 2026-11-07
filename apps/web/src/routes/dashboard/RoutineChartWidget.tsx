@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { ConsistencyChartBlock } from '../charts/ConsistencyChartBlock';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
-import { WidgetReorderControls } from './WidgetReorderControls';
+import { WidgetDragHandle } from './SortableWidget';
 
 // Dashboard widget — global routine consistency chart (TaskCharts.md
 // §3.4). Compact variant of the one at /tasks top: only 1M/3M pills
@@ -22,7 +22,7 @@ export function RoutineChartWidget() {
       bodyId={BODY_ID}
       headerRight={
         <div className="flex items-center gap-3">
-          <WidgetReorderControls id="routine_chart" />
+          <WidgetDragHandle />
           <WidgetCollapseToggle id="routine_chart" controlsId={BODY_ID} />
           <Link
             to="/tasks"

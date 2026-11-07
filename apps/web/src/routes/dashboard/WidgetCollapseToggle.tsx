@@ -4,7 +4,7 @@ import type { WidgetId } from './widget-order';
 
 // "▼ Show" / "▲ Hide" button that mirrors the Tasks page's consistency
 // collapse (TopOfTasksCharts.tsx). Each dashboard widget drops this
-// into its header next to WidgetReorderControls; the body is gated on
+// into its header next to WidgetDragHandle; the body is gated on
 // `useWidgetCollapsed(id)` in the widget itself.
 //
 // ponytail: separate component (vs inlining) so the aria-controls id,
@@ -20,9 +20,8 @@ interface Props {
 export function WidgetCollapseToggle({ id, controlsId }: Props) {
   const collapsed = useWidgetCollapsed(id);
 
-  // stopPropagation mirrors WidgetReorderControls — BacklogIndicatorWidget
-  // wraps its body in a <Link>, so without this a click on the toggle
-  // would also navigate the user away.
+  // stopPropagation — BacklogIndicatorWidget wraps its body in a <Link>,
+  // so without this a click on the toggle would also navigate away.
   const onClick = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();

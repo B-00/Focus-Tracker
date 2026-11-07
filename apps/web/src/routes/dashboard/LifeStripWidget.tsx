@@ -10,7 +10,7 @@ import { MilestoneMarker } from '../life/MilestoneMarker';
 import { iconFor } from '../life/MilestonesSection';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
-import { WidgetReorderControls } from './WidgetReorderControls';
+import { WidgetDragHandle } from './SortableWidget';
 
 // Dashboard widget — "Life strip" (MementoMori.md §8.1).
 //
@@ -49,7 +49,7 @@ export function LifeStripWidget() {
           <h2 className="text-sm font-medium uppercase tracking-wider text-neutral-300">
             Life
           </h2>
-          <WidgetReorderControls id="life_strip" />
+          <WidgetDragHandle />
           <WidgetCollapseToggle id="life_strip" controlsId={BODY_ID} />
           {stats && (
             <span className="text-xs text-neutral-500">

@@ -54,6 +54,21 @@ export const WIDGET_LABELS: Record<WidgetId, string> = {
   life_strip: 'Life (Memento Mori)',
 };
 
+/// One-line descriptions shown beneath the widget name in the Settings
+/// Dashboard tab row (Settings.md §4.3). Keep concise — the row has
+/// limited horizontal space.
+export const WIDGET_DESCRIPTIONS: Record<WidgetId, string> = {
+  focus_session: 'Start, pause, and end timed focus sessions.',
+  today_tasks: "Dated tasks that intersect today.",
+  today_routines: "Routine instances scheduled for today.",
+  ongoing_tasks: 'Ongoing (undated) tasks needing attention.',
+  backlog: 'Tasks that transferred past their due date.',
+  routine_chart: 'Cumulative consistency score for routines.',
+  dated_chart: 'Cumulative consistency score for dated tasks.',
+  today_activity: "Today's app and site usage by minutes.",
+  life_strip: 'A thin Memento Mori week strip.',
+};
+
 /// Default order matches the user's preferred "action-first" stack:
 /// focus session up top (if active it's the single most relevant thing on
 /// the dashboard; if not, Start is still a click away), then today's
@@ -145,25 +160,19 @@ function arraysEqual(a: readonly WidgetId[], b: readonly WidgetId[]): boolean {
 }
 
 // ---------------------------------------------------------------------------
-//  Public mutators — unchanged signatures (keeps WidgetReorderControls +
-//  Dashboard.reset button working without refactor).
+//  Public mutators
 // ---------------------------------------------------------------------------
 
-/// Swap `id` with the widget above it. No-op if it's already first.
-export function moveWidgetUp(id: WidgetId) {
-  const i = state.indexOf(id);
-  if (i <= 0) return;
+/// Move `activeId` to the position of `overId` — the pair dnd-kit's
+/// onDragEnd gives us. Reuses applyOrder so localStorage + server sync +
+/// emit all fire once per drop.
+export function reorderWidget(activeId: WidgetId, overId: WidgetId) {
+  const i = state.indexOf(activeId);
+  const j = state.indexOf(overId);
+  if (i < 0 || j < 0 || i === j) return;
   const next = state.slice();
-  [next[i - 1], next[i]] = [next[i]!, next[i - 1]!];
-  applyOrder(next);
-}
-
-/// Swap `id` with the widget below it. No-op if it's already last.
-export function moveWidgetDown(id: WidgetId) {
-  const i = state.indexOf(id);
-  if (i < 0 || i >= state.length - 1) return;
-  const next = state.slice();
-  [next[i], next[i + 1]] = [next[i + 1]!, next[i]!];
+  const [moved] = next.splice(i, 1);
+  next.splice(j, 0, moved!);
   applyOrder(next);
 }
 
