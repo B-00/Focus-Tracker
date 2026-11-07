@@ -87,7 +87,7 @@ export function TopTargetsList({
           />
           <ol className="flex-1 space-y-1.5">
             {shown.map((row, i) => {
-              const color = PALETTE[i % PALETTE.length];
+              const color = PALETTE[i % PALETTE.length]!;
               const shareOfTotal = denom === 0 ? 0 : row.durationMs / denom;
               return (
                 <Row

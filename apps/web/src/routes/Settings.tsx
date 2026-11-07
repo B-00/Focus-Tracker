@@ -1,22 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+import { logoutAll as apiLogoutAll } from '../lib/auth-api';
+import { useAuthStore } from '../stores/auth-store';
+import { AboutSection } from './settings/AboutSection';
+import { DashboardSection } from './settings/DashboardSection';
 import { DevicesSection } from './settings/DevicesSection';
+import { MementoMoriSection } from './settings/MementoMoriSection';
+import { ProfileSection } from './settings/ProfileSection';
 
 // /settings — left-rail tab layout per Settings.md §3.1.
 // Each tab has a kebab-case `#anchor` ID; loading /settings#devices lands
 // the user directly on Devices. Hash updates use replaceState so back
 // button isn't cluttered (per spec).
 //
-// v1-of-this-slice scope: only the Devices tab is implemented. The other
-// five tabs (Profile, Memento Mori, Dashboard, Telemetry, About) are
-// stub panels with a "Coming soon" message so the rail looks right and
-// future slices can swap them in without re-laying-out the page.
+// All five tabs are implemented: Profile, Memento Mori, Dashboard,
+// Devices, About. Each section component lives under ./settings/ and
+// owns its own data + save semantics. (The spec's #telemetry tab was
+// removed as redundant — DevicesSection already surfaces the API base
+// URL via the same ApiBaseUrlBanner during the pairing flow.)
 
 type SectionId =
   | 'profile'
   | 'memento-mori'
   | 'dashboard'
   | 'devices'
-  | 'telemetry'
   | 'about';
 
 interface SectionDef {
@@ -29,7 +36,6 @@ const SECTIONS: ReadonlyArray<SectionDef> = [
   { id: 'memento-mori', label: 'Memento Mori' },
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'devices', label: 'Devices' },
-  { id: 'telemetry', label: 'Telemetry' },
   { id: 'about', label: 'About' },
 ];
 
@@ -45,6 +51,27 @@ export function SettingsPage() {
   const [activeId, setActiveId] = useState<SectionId>(() =>
     parseHash(typeof window !== 'undefined' ? window.location.hash : ''),
   );
+  const [signingOutAll, setSigningOutAll] = useState(false);
+  const navigate = useNavigate();
+  const resetSession = useAuthStore((s) => s.resetSession);
+  const email = useAuthStore((s) => s.user?.email ?? null);
+
+  async function handleLogOutOfAll(): Promise<void> {
+    // Settings.md §4.1: Profile is the home for the "sign everywhere out"
+    // escape hatch (the day-to-day Sign Out in the nav logs out of this
+    // browser only). Best-effort server call then wipe local state so
+    // the user isn't trapped half-authed if the API blips.
+    setSigningOutAll(true);
+    try {
+      await apiLogoutAll();
+    } catch {
+      // intentional — fall through to the local reset
+    } finally {
+      resetSession();
+      setSigningOutAll(false);
+      void navigate({ to: '/login' });
+    }
+  }
 
   // Sync to URL changes (back/forward, manual edit, deep-link from other
   // pages). We use a native hashchange listener instead of TanStack Router
@@ -74,11 +101,22 @@ export function SettingsPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          Preferences, account, and paired devices.
-        </p>
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+          <p className="mt-1 text-sm text-neutral-400">
+            Preferences, account, and paired devices.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleLogOutOfAll()}
+          disabled={signingOutAll}
+          title="Revoke every active session for your account across all browsers and devices."
+          className="shrink-0 rounded-md border border-red-500/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-300 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
+        >
+          {signingOutAll ? 'Signing out…' : 'Log out of all'}
+        </button>
       </header>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[180px_1fr]">
@@ -115,22 +153,18 @@ export function SettingsPage() {
         >
           {activeId === 'devices' ? (
             <DevicesSection />
-          ) : (
-            <StubSection label={activeLabel} />
-          )}
+          ) : activeId === 'profile' ? (
+            <ProfileSection email={email} />
+          ) : activeId === 'memento-mori' ? (
+            <MementoMoriSection />
+          ) : activeId === 'dashboard' ? (
+            <DashboardSection />
+          ) : activeId === 'about' ? (
+            <AboutSection />
+          ) : null}
         </section>
       </div>
     </main>
   );
 }
 
-function StubSection({ label }: { label: string }) {
-  return (
-    <div>
-      <h2 className="text-lg font-semibold tracking-tight">{label}</h2>
-      <p className="mt-2 text-sm text-neutral-400">
-        Not implemented yet. Tracking in <span className="font-mono text-neutral-300">Settings.md</span>.
-      </p>
-    </div>
-  );
-}

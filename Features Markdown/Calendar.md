@@ -1,6 +1,6 @@
 # Focus Tracker — Calendar (Feature Spec)
 
-> A month-first calendar view that displays **dated tasks** and **past focus sessions**.
+> A month-first calendar view that displays **dated tasks** by day.
 > Users can create and edit dated tasks directly from the calendar.
 
 **Status:** Specification in progress. v1 first batch (see `PROJECT.md` §6).
@@ -9,9 +9,11 @@
 
 ## 1. Overview
 
-The Calendar is a read-mostly visual surface for "when things happened" (past focus sessions) and "when things are due / scheduled" (dated tasks). It is **not** a scheduling tool for focus sessions — sessions are recorded as they happen, not booked in advance.
+The Calendar is a read-mostly visual surface for "what's due / scheduled" (dated tasks) on a month-grid.
 
 The user can create a new dated task by clicking an empty day, and can edit/move/delete existing tasks from the calendar without leaving the view.
+
+Focus sessions and activity telemetry deliberately do **not** appear on this surface — they live on `/focus` and `/activity` respectively, and the Memento Mori grid at `/life` handles the long-form "lived weeks" story.
 
 ---
 
@@ -20,13 +22,12 @@ The user can create a new dated task by clicking an empty day, and can edit/move
 ### Goals
 - Single-view answer to "what's happening this week / month?"
 - Frictionless creation of dated tasks (click day → type → done).
-- Past focus sessions visible at the day-cell level so the calendar doubles as a casual session history.
 - Multi-day tasks render as continuous bars across cells.
 
 ### Non-Goals (v1)
 - External calendar integrations (Google, Outlook, iCal subscriptions).
 - Meetings as a first-class concept.
-- Scheduled / planned focus sessions (block time in advance).
+- Any focus-session / activity-telemetry surfacing on the calendar — those belong on `/focus` and `/activity`.
 - Reminders / notifications tied to calendar entries.
 - Multiple calendar overlays / color-by-section toggles (defer).
 - Drag-and-drop to move a task's dates (defer; edit dates via the task modal).
@@ -47,14 +48,11 @@ The user can create a new dated task by clicking an empty day, and can edit/move
   - Completed tasks are rendered with reduced opacity + strikethrough, but still visible.
   - **Sort order within a day cell** (when multiple pills/bars start on the same day): priority descending (extreme → low), then by creation time. So the cell visually leads with what matters most.
 
-### 3.2 Past focus sessions
-- Source: `FocusSession` rows that have ended (`endedAt != null`).
-- Aggregated per day: each day cell shows a small indicator (e.g. a dot + a number) reflecting **session count** for that day, plus a tooltip showing total focus minutes for the day.
-- Today's in-progress session (if any) is also shown, marked distinctly (e.g. pulsing dot).
-- Future days never show session data (sessions can't be scheduled in v1).
-
-### 3.3 Today
+### 3.2 Today
 - The cell representing today is visually distinct (border, accent background, "today" label).
+
+### 3.3 Hover
+- Cells with one or more tasks surface a tooltip on hover that lists each task's priority glyph, title, and section (or "Inbox"). Empty cells show no tooltip — nothing to show. The tooltip is pure CSS (`group-hover`); no JS state. Clicking is reserved for Slice 3 (inline composer) and Slice 4 (edit popover).
 
 ---
 
@@ -75,8 +73,7 @@ In v1, the calendar can create and edit **only dated tasks** — nothing else.
 - Inside the popover; confirmation modal if the task is incomplete.
 
 ### 4.4 What the Calendar does NOT let you do (intentionally)
-- Cannot create or schedule a focus session from the calendar. Sessions start from the dashboard/`/focus`.
-- Cannot edit a focus session (sessions are immutable once ended). Clicking the day's session indicator opens a quick read-only summary (counts, total minutes, link to session detail).
+- Cannot create, display, or interact with focus sessions in any way — the calendar is a dated-task surface only. For sessions use `/focus`; for raw time usage use `/activity`.
 - Cannot add per-day notes (those live on Memento Mori — see `MementoMori.md` — and are weekly, not daily).
 
 ---
@@ -105,13 +102,12 @@ Controls in the calendar header:
 ## 6. Behavior
 
 ### 6.1 Data fetching
-- On mount: fetch `tasks?from={firstVisibleDay}&to={lastVisibleDay}` and `focus-sessions/summary?from=...&to=...` (returns per-day session counts and total minutes).
+- On mount: fetch `tasks?from={firstVisibleDay}&to={lastVisibleDay}` for dated tasks that intersect the visible range.
 - Refetch on month change.
 - TanStack Query caches per range — fast back-navigation, light bandwidth.
 
 ### 6.2 Live updates
 - When the user creates / edits / deletes a task elsewhere (dashboard, `/tasks`), the calendar invalidates the relevant range and refetches.
-- An in-progress focus session is reflected on today's cell live (polled every 30s while the calendar is visible; no WebSocket in v1).
 
 ### 6.3 Empty states
 - Empty month → calendar still renders the grid; no special message.
@@ -128,8 +124,6 @@ Controls in the calendar header:
 | Method | Path                                                     | Purpose                                              |
 | ------ | -------------------------------------------------------- | ---------------------------------------------------- |
 | GET    | `/v1/tasks?from={date}&to={date}`                        | List dated tasks intersecting the range              |
-| GET    | `/v1/focus-sessions/summary?from={date}&to={date}`       | Per-day session count + total minutes (aggregated)   |
-| GET    | `/v1/focus-sessions/{id}`                                | Read-only session detail for the quick popover       |
 
 Task create / edit / delete reuse the endpoints in `Tasks.md` §7.
 
@@ -147,7 +141,6 @@ Task create / edit / delete reuse the endpoints in `Tasks.md` §7.
 ## 9. Dependencies
 
 - **Tasks** (`Features Markdown/Tasks.md`) — for dated tasks.
-- **Focus Sessions** (`Features Markdown/FocusSession.md`) — for past session indicators.
 - **date-fns** — for date arithmetic and locale formatting.
 
 ---

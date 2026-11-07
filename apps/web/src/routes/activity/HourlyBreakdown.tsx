@@ -55,11 +55,16 @@ export function HourlyBreakdown({
         const byTarget = kind === 'apps' ? b.appsByTopTarget : b.sitesByTopTarget;
         // The byTarget array is the same length as topTargets — defensive
         // `?? 0` handles a payload regression without crashing the chart.
-        const segments = topTargets.map((t, i) => ({
-          name: t.target,
-          color: PALETTE[i % PALETTE.length],
-          ms: byTarget[i] ?? 0,
-        }));
+        const segments: Array<{ name: string; color: string; ms: number }> =
+          topTargets.map((t, i) => ({
+            name: t.target,
+            // `!` — the modulo always indexes a defined slot; readonly-tuple
+            // narrowing in TS 5 just can't see that. Explicit `string`
+            // widening on the array type so the OTHER_COLOR push below
+            // doesn't trip the literal-union check.
+            color: PALETTE[i % PALETTE.length]!,
+            ms: byTarget[i] ?? 0,
+          }));
         const topSum = segments.reduce((acc, s) => acc + s.ms, 0);
         const otherMs = Math.max(0, sourceTotal - topSum);
         if (otherMs > 0) {
@@ -123,7 +128,7 @@ export function HourlyBreakdown({
 
         {hover !== null && rows[hover.bucketIndex] && (
           <Tooltip
-            row={rows[hover.bucketIndex]}
+            row={rows[hover.bucketIndex]!}
             bucketIndex={hover.bucketIndex}
             bucketCount={rows.length}
             grain={grain}

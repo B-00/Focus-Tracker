@@ -10,8 +10,13 @@ import { isJwtValid } from './lib/jwt';
 import { tokenStorage } from './lib/token-storage';
 import { LoginPage } from './routes/Login';
 import { DashboardPage } from './routes/Dashboard';
+import { FocusPage } from './routes/Focus';
 import { SettingsPage } from './routes/Settings';
 import { ActivityPage } from './routes/Activity';
+import { TasksPage } from './routes/Tasks';
+import { BacklogPage } from './routes/Backlog';
+import { LifePage } from './routes/Life';
+import { CalendarPage } from './routes/Calendar';
 
 // Code-based routing (no codegen). Tree:
 //
@@ -89,9 +94,48 @@ const activityRoute = createRoute({
   component: ActivityPage,
 });
 
+const tasksRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/tasks',
+  component: TasksPage,
+});
+
+const backlogRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/backlog',
+  component: BacklogPage,
+});
+
+const focusRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/focus',
+  component: FocusPage,
+});
+
+const lifeRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/life',
+  component: LifePage,
+});
+
+const calendarRoute = createRoute({
+  getParentRoute: () => protectedLayout,
+  path: '/calendar',
+  component: CalendarPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedLayout.addChildren([dashboardRoute, activityRoute, settingsRoute]),
+  protectedLayout.addChildren([
+    dashboardRoute,
+    tasksRoute,
+    backlogRoute,
+    focusRoute,
+    activityRoute,
+    lifeRoute,
+    calendarRoute,
+    settingsRoute,
+  ]),
 ]);
 
 export const router = createRouter({

@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma, User } from '@prisma/client';
 import type {
+  DashboardPrefsResponse,
   MeProfileResponse,
+  UpdateDashboardPrefsRequest,
   UpdateMeProfileRequest,
 } from '@focus-tracker/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -155,6 +157,63 @@ export class UsersService {
     }
     return this.getProfile(userId);
   }
+
+  // ---------------------------------------------------------------------------
+  //  Dashboard Prefs (Dashboard.md §9)
+  // ---------------------------------------------------------------------------
+
+  /// Read-side projection used by `GET /v1/me/dashboard-prefs`. Returns empty
+  /// arrays (NOT 404) when the row doesn't exist yet — the client then merges
+  /// with its code-side defaults, so a fresh account "just works".
+  async getDashboardPrefs(userId: string): Promise<DashboardPrefsResponse> {
+    const row = await this.prisma.userDashboardPrefs.findUnique({
+      where: { userId },
+      select: {
+        widgetOrder: true,
+        hiddenWidgets: true,
+        collapsedWidgets: true,
+      },
+    });
+    return {
+      widgetOrder: row?.widgetOrder ?? [],
+      hiddenWidgets: row?.hiddenWidgets ?? [],
+      collapsedWidgets: row?.collapsedWidgets ?? [],
+    };
+  }
+
+  /// Full-replace upsert used by `PUT /v1/me/dashboard-prefs`. The client
+  /// always has the complete state in hand (it's the only writer), so no
+  /// partial-merge semantics. Undefined arrays default to [] on write so the
+  /// client can send only the field it owns (`widgetOrder`) today and we add
+  /// hide/collapse controls later without a wire change.
+  async upsertDashboardPrefs(
+    userId: string,
+    input: UpdateDashboardPrefsRequest,
+  ): Promise<DashboardPrefsResponse> {
+    const widgetOrder = dedupe(input.widgetOrder);
+    const hiddenWidgets = dedupe(input.hiddenWidgets ?? []);
+    const collapsedWidgets = dedupe(input.collapsedWidgets ?? []);
+    await this.prisma.userDashboardPrefs.upsert({
+      where: { userId },
+      create: { userId, widgetOrder, hiddenWidgets, collapsedWidgets },
+      update: { widgetOrder, hiddenWidgets, collapsedWidgets },
+    });
+    return { widgetOrder, hiddenWidgets, collapsedWidgets };
+  }
+}
+
+/// Stable-order de-dupe. Protects the DB from a buggy client sending the
+/// same widget ID twice (which would then double-render on read).
+function dedupe(xs: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of xs) {
+    if (!seen.has(x)) {
+      seen.add(x);
+      out.push(x);
+    }
+  }
+  return out;
 }
 
 /// Cheap IANA-validity gate. `Intl.DateTimeFormat` throws `RangeError` on

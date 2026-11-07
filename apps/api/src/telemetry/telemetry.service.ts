@@ -267,25 +267,51 @@ export class TelemetryService {
   //  Helpers
   // -----------------------------------------------------------------------
 
-  /// Look up the currently-active focus session for the user ONCE per
-  /// batch, then for each event decide whether `event.startedAt` falls
-  /// inside the session AND outside every pause sub-window (FocusSession.md
-  /// §5.2). Returns a Map<eventId, focusSessionId | null>.
+  /// Attribute each incoming event to a focus session per FocusSession.md §7.
+  /// Returns a Map<eventId, focusSessionId | null>.
   ///
-  /// Known v1 limitation: only attributes against the user's currently
-  /// `running` / `paused` session. Late-arriving events whose `startedAt`
-  /// fell inside an already-`completed` session are recorded with
-  /// `focusSessionId = null`. Acceptable trade-off — FocusSession isn't
-  /// built yet, so this code is effectively dormant; we revisit when the
-  /// session UI lands.
+  /// Spec rule:
+  ///   event.focusSessionId = id of the user's session S where
+  ///     S.startedAt <= event.startedAt < S.endedAt
+  ///     AND event.startedAt is NOT inside any pause window of S
+  ///     AND S.state IN ('running', 'paused', 'completed')
+  ///   ELSE null
+  ///
+  /// Implementation: fetch candidate sessions ONCE per batch (not per event).
+  /// The candidate set is any session whose window could possibly contain any
+  /// event in the batch: endedAt is null (still active) OR endedAt >= min(event
+  /// startedAt). This keeps the query bounded even for a user with years of
+  /// completed sessions. For each event we then scan candidates in reverse-
+  /// chronological order so the most-recent matching session wins (sessions
+  /// don't overlap in practice, but the partial unique index only bars active
+  /// overlap — defensive).
   private async attributeFocusSessions(
     userId: string,
     events: TelemetryEvent[],
   ): Promise<Map<string, string | null>> {
     const result = new Map<string, string | null>();
+    if (events.length === 0) return result;
 
-    const active = await this.prisma.focusSession.findFirst({
-      where: { userId, state: { in: ['running', 'paused'] } },
+    // Earliest event startedAt bounds the candidate query.
+    let earliestMs = Number.POSITIVE_INFINITY;
+    for (const e of events) {
+      const ms = Date.parse(e.startedAt);
+      if (!Number.isNaN(ms) && ms < earliestMs) earliestMs = ms;
+    }
+
+    const candidates = await this.prisma.focusSession.findMany({
+      where: {
+        userId,
+        // Per §7: running, paused, and completed sessions all attribute.
+        // Aborted sessions are excluded — their endedAt is a server fabrication
+        // (§9.8) and we don't want to retroactively claim events in a window
+        // the user wasn't actually focused.
+        state: { in: ['running', 'paused', 'completed'] },
+        OR: [
+          { endedAt: null },
+          { endedAt: { gte: new Date(earliestMs) } },
+        ],
+      },
       orderBy: { startedAt: 'desc' },
       select: {
         id: true,
@@ -298,24 +324,29 @@ export class TelemetryService {
       },
     });
 
-    if (!active) {
+    if (candidates.length === 0) {
       for (const e of events) result.set(e.id, null);
       return result;
     }
 
     for (const e of events) {
       const eventStart = new Date(e.startedAt);
-      const inWindow =
-        active.startedAt <= eventStart &&
-        (active.endedAt === null || active.endedAt > eventStart);
-      if (!inWindow) {
-        result.set(e.id, null);
-        continue;
+      let attributed: string | null = null;
+      for (const s of candidates) {
+        const inWindow =
+          s.startedAt <= eventStart &&
+          (s.endedAt === null || s.endedAt > eventStart);
+        if (!inWindow) continue;
+        const inAnyPause = s.pauses.some(
+          (p) =>
+            p.pausedAt <= eventStart &&
+            (p.resumedAt === null || p.resumedAt > eventStart),
+        );
+        if (inAnyPause) break; // inside the window but paused → null per §7
+        attributed = s.id;
+        break; // most-recent session wins
       }
-      const inAnyPause = active.pauses.some(
-        (p) => p.pausedAt <= eventStart && (p.resumedAt === null || p.resumedAt > eventStart),
-      );
-      result.set(e.id, inAnyPause ? null : active.id);
+      result.set(e.id, attributed);
     }
     return result;
   }

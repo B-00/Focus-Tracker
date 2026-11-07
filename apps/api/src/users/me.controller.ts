@@ -6,13 +6,17 @@ import {
   HttpStatus,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import {
   changePasswordRequestSchema,
+  updateDashboardPrefsRequestSchema,
   updateMeProfileRequestSchema,
   type ChangePasswordRequest,
+  type DashboardPrefsResponse,
   type MeProfileResponse,
+  type UpdateDashboardPrefsRequest,
   type UpdateMeProfileRequest,
 } from '@focus-tracker/shared';
 import { AuthService } from '../auth/auth.service';
@@ -62,5 +66,29 @@ export class MeController {
     @Body(new ZodBodyPipe(changePasswordRequestSchema)) body: ChangePasswordRequest,
   ): Promise<void> {
     await this.auth.changePassword(user.userId, body);
+  }
+
+  /// GET /v1/me/dashboard-prefs  (Dashboard.md §9)
+  ///
+  /// Returns empty arrays when no row exists yet; the client merges with its
+  /// code-side defaults so a fresh account renders the default stack.
+  @Get('dashboard-prefs')
+  getDashboardPrefs(
+    @CurrentUser() user: JwtRequestContext,
+  ): Promise<DashboardPrefsResponse> {
+    return this.users.getDashboardPrefs(user.userId);
+  }
+
+  /// PUT /v1/me/dashboard-prefs  (Dashboard.md §9)
+  ///
+  /// Full-replace upsert. The client always has the full prefs state in
+  /// hand — this is a single-writer surface.
+  @Put('dashboard-prefs')
+  updateDashboardPrefs(
+    @CurrentUser() user: JwtRequestContext,
+    @Body(new ZodBodyPipe(updateDashboardPrefsRequestSchema))
+    body: UpdateDashboardPrefsRequest,
+  ): Promise<DashboardPrefsResponse> {
+    return this.users.upsertDashboardPrefs(user.userId, body);
   }
 }

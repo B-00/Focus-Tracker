@@ -112,15 +112,19 @@ export function Modal(props: ModalProps) {
   if (!open) return null;
 
   return createPortal(
+    // Single wrapper = backdrop + centering layout. Earlier the backdrop
+    // was a sibling <div class="absolute inset-0"> inside this wrapper,
+    // which meant a real user click at (x, y) hit the *backdrop* via
+    // the browser's hit-test — so `e.target` was the backdrop while
+    // `e.currentTarget` was the wrapper, and the equality check that
+    // gates backdrop-close never matched. Merging them so the wrapper
+    // both paints the dim AND owns the click target fixes the bug.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8"
-      // The backdrop layer — pointer-events go to the wrapper; clicks on
-      // the dialog itself stopPropagation below.
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (closeOnBackdropClick && e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" aria-hidden />
       <div
         ref={dialogRef}
         role="dialog"
@@ -131,15 +135,29 @@ export function Modal(props: ModalProps) {
         className="relative z-10 w-full max-w-md rounded-xl border border-neutral-800 bg-neutral-950 shadow-2xl shadow-black/50 focus:outline-none"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <header className="border-b border-neutral-800 px-5 py-4">
-          <h2 id={titleId} className="text-base font-semibold text-neutral-100">
-            {title}
-          </h2>
-          {description && (
-            <p id={descId} className="mt-1 text-sm text-neutral-400">
-              {description}
-            </p>
-          )}
+        <header className="flex items-start justify-between gap-3 border-b border-neutral-800 px-5 py-4">
+          <div className="min-w-0">
+            <h2 id={titleId} className="text-base font-semibold text-neutral-100">
+              {title}
+            </h2>
+            {description && (
+              <p id={descId} className="mt-1 text-sm text-neutral-400">
+                {description}
+              </p>
+            )}
+          </div>
+          {/* × dismiss — Esc + backdrop click already close the dialog,
+              but a visible affordance matches what users expect from
+              every other modal on the web. Uses the multiplication-sign
+              glyph so we don't drag in an icon library. */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="-mr-1 -mt-1 shrink-0 rounded p-1 text-lg leading-none text-neutral-500 transition hover:bg-neutral-800 hover:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-emerald-400/50"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
         </header>
         <div className="px-5 py-5">{children}</div>
         {footer && (

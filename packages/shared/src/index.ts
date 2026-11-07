@@ -127,6 +127,165 @@ export type {
 } from './me.js';
 
 // ---------------------------------------------------------------------------
+//  Dashboard Prefs (Dashboard.md §9)
+// ---------------------------------------------------------------------------
+export {
+  dashboardPrefsResponseSchema,
+  updateDashboardPrefsRequestSchema,
+} from './dashboard-prefs.js';
+export type {
+  DashboardPrefsResponse,
+  UpdateDashboardPrefsRequest,
+} from './dashboard-prefs.js';
+
+// ---------------------------------------------------------------------------
+//  Tasks + Sections (Tasks.md)
+// ---------------------------------------------------------------------------
+export {
+  sectionResponseSchema,
+  createSectionRequestSchema,
+  updateSectionRequestSchema,
+  SECTION_DELETE_MODES,
+  taskResponseSchema,
+  createTaskRequestSchema,
+  updateTaskRequestSchema,
+  listTasksQuerySchema,
+  taskInstanceResponseSchema,
+  updateInstanceRequestSchema,
+  redateRequestSchema,
+  backlogListQuerySchema,
+  backlogListResponseSchema,
+  backlogSummarySchema,
+  BACKLOG_GROUP_BY,
+  TASK_ERROR_CODES,
+} from './tasks.js';
+export type {
+  SectionResponse,
+  CreateSectionRequest,
+  UpdateSectionRequest,
+  SectionDeleteMode,
+  TaskResponse,
+  CreateTaskRequest,
+  UpdateTaskRequest,
+  ListTasksQuery,
+  TaskInstanceResponse,
+  UpdateInstanceRequest,
+  RedateRequest,
+  BacklogListQuery,
+  BacklogListResponse,
+  BacklogSummary,
+  BacklogGroupBy,
+  TaskErrorCode,
+} from './tasks.js';
+
+// ---------------------------------------------------------------------------
+//  Consistency Charts (TaskCharts.md)
+// ---------------------------------------------------------------------------
+export {
+  computeBaseScore,
+  computeBacklogPenalty,
+  backlogDecayTerms,
+  sumWeight,
+  CHART_DEFAULT_RANGE_DAYS,
+  CHART_MAX_RANGE_DAYS,
+  chartRangeQuerySchema,
+  routineChartPointSchema,
+  datedChartPointSchema,
+  routineChartSeriesResponseSchema,
+  datedChartSeriesResponseSchema,
+} from './charts.js';
+export type {
+  ChartRangeQuery,
+  RoutineChartPoint,
+  DatedChartPoint,
+  RoutineChartSeriesResponse,
+  DatedChartSeriesResponse,
+} from './charts.js';
+
+// ---------------------------------------------------------------------------
+//  Focus Sessions (FocusSession.md)
+// ---------------------------------------------------------------------------
+export {
+  FOCUS_SESSION_ERROR_CODES,
+  focusSessionPauseResponseSchema,
+  focusSessionResponseSchema,
+  focusSessionListItemSchema,
+  focusSessionListResponseSchema,
+  focusSessionCurrentResponseSchema,
+  startFocusSessionRequestSchema,
+  sessionAlreadyActiveResponseSchema,
+  focusSessionListQuerySchema,
+  sumPauseMs,
+  wallClockMs,
+  effectiveMs,
+  isActiveState,
+} from './focus-sessions.js';
+export type {
+  FocusSessionErrorCode,
+  FocusSessionPauseResponse,
+  FocusSessionResponse,
+  FocusSessionListItem,
+  FocusSessionListResponse,
+  FocusSessionCurrentResponse,
+  StartFocusSessionRequest,
+  SessionAlreadyActiveResponse,
+  FocusSessionListQuery,
+  FocusSessionBreakdownRow,
+  FocusSessionBreakdownResponse,
+  FocusSessionLatestTarget,
+} from './focus-sessions.js';
+export {
+  focusSessionBreakdownRowSchema,
+  focusSessionBreakdownResponseSchema,
+  focusSessionLatestTargetSchema,
+} from './focus-sessions.js';
+
+// ---------------------------------------------------------------------------
+//  Memento Mori — Life Grid (MementoMori.md §6.1 / §7)
+// ---------------------------------------------------------------------------
+export {
+  LIFE_HEATMAP_HOUR_BOUNDARIES,
+  lifeHeatmapTier,
+  lifeGridWeekSchema,
+  lifeGridResponseSchema,
+  lifeWeekTopItemSchema,
+  lifeWeekNoteSchema,
+  lifeWeekDetailSchema,
+  lifeWeekNoteUpsertSchema,
+} from './life.js';
+export type {
+  LifeHeatmapTier,
+  LifeGridWeek,
+  LifeGridResponse,
+  LifeWeekTopItem,
+  LifeWeekNote,
+  LifeWeekDetail,
+  LifeWeekNoteUpsert,
+} from './life.js';
+
+// ---------------------------------------------------------------------------
+//  Memento Mori — Milestones (MementoMori.md §3.4 / §4.4 / §5.3 / §7)
+// ---------------------------------------------------------------------------
+export {
+  MILESTONE_LABEL_MAX,
+  MILESTONE_ICON_MAX,
+  HEX_COLOR_REGEX,
+  YMD_REGEX,
+  milestoneSchema,
+  milestoneListResponseSchema,
+  createMilestoneRequestSchema,
+  updateMilestoneRequestSchema,
+  MILESTONE_ERROR_CODES,
+} from './milestones.js';
+export type {
+  Milestone,
+  MilestoneListResponse,
+  CreateMilestoneRequest,
+  UpdateMilestoneRequest,
+  MilestoneErrorCode,
+} from './milestones.js';
+
+// ---------------------------------------------------------------------------
 //  Pairing + Devices (Auth.md §5)
 // ---------------------------------------------------------------------------
 export {

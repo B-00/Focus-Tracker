@@ -112,7 +112,7 @@ When a session ends while paused, `resumedAt` is set to the session's `endedAt` 
 ## 5. Time accounting
 
 - **Wall-clock duration**: `endedAt - startedAt`. Includes all paused intervals.
-- **Effective duration**: `(endedAt - startedAt) - Σ FocusSessionPause.durationMs`. This is the number reported as "session length" and used for Memento Mori weekly focus-minutes shading (see `MementoMori.md` §4.2).
+- **Effective duration**: `(endedAt - startedAt) - Σ FocusSessionPause.durationMs`. This is the number reported as "session length" on the `/focus` history and post-session summary.
 - For an in-progress session, both numbers are computed live on the client from `startedAt` + the running pause clock; the server only persists the canonical values on each state change.
 
 ---
@@ -262,7 +262,7 @@ The race window (another tab starting a third session in between the two calls) 
 - The browser the session was started in has no special status — any browser / device the user is logged into shows the same active session.
 
 ### 9.8 Crash / abandon handling
-- If a session sits in `running` or `paused` for more than 24 hours without any client `GET /v1/focus-sessions/current` heartbeat, a server job marks it `aborted` with `endedAt = startedAt + min(24h, plannedDurationMs)` to avoid contaminating Memento Mori focus-minute shading with a phantom multi-day session.
+- If a session sits in `running` or `paused` for more than 24 hours without any client `GET /v1/focus-sessions/current` heartbeat, a server job marks it `aborted` with `endedAt = startedAt + min(24h, plannedDurationMs)` to avoid phantom multi-day sessions in `/focus` history.
 - Aborted sessions appear in history with a clear "auto-ended (no activity)" label.
 
 ---
@@ -276,10 +276,9 @@ The race window (another tab starting a third session in between the two calls) 
 | POST   | `/v1/focus-sessions/{id}/pause`                 | Pause                                                                  |
 | POST   | `/v1/focus-sessions/{id}/resume`                | Resume                                                                 |
 | POST   | `/v1/focus-sessions/{id}/stop`                  | End manually                                                           |
-| GET    | `/v1/focus-sessions?from=...&to=...`            | List historical sessions (for `/focus` history and Calendar indicators) |
+| GET    | `/v1/focus-sessions?from=...&to=...`            | List historical sessions (for `/focus` history)                        |
 | GET    | `/v1/focus-sessions/{id}`                       | Detailed session (used for summary view)                               |
 | GET    | `/v1/focus-sessions/{id}/breakdown`             | Top apps + top websites for this session (from attributed telemetry)   |
-| GET    | `/v1/focus-sessions/summary?from=...&to=...`    | Per-day session counts + total minutes (used by `Calendar.md` §3.2)    |
 
 User settings endpoints live on `/v1/me` and are detailed alongside the auth/user spec in `PROJECT.md` §9.
 
@@ -300,8 +299,6 @@ User settings endpoints live on `/v1/me` and are detailed alongside the auth/use
 - **Telemetry pipeline** (`PROJECT.md` §12) — provides the events that get attributed.
 - **Browser extension** (`Sources Markdown/Extension.md`) and **Desktop app** (`Sources Markdown/DesktopApp.md`) — the actual sources of those events.
 - **Tasks** (`Features Markdown/Tasks.md`) — for the optional `taskId` link.
-- **Memento Mori** (`Features Markdown/MementoMori.md`) — consumes `effectiveDurationMs` for weekly shading.
-- **Calendar** (`Features Markdown/Calendar.md`) — consumes daily session-count + total-minutes summary.
 - **Recharts** — for the top-apps / top-websites bar charts in the post-session summary.
 
 ---
@@ -314,5 +311,4 @@ User settings endpoints live on `/v1/me` and are detailed alongside the auth/use
 - **Stop a session from the extension / desktop app?** Could let the desktop tray show a Stop button. Defer — start in the web UI only.
 - **What happens to the linked task on session end?** No automatic side-effect (task completion is manual). The summary panel offers a one-click "Mark complete" but doesn't auto-tick.
 - **Live telemetry breakdown during an active session?** v1 only shows "current target" (latest event). Full breakdown shows only in the post-session summary. Live breakdown is nice but adds a polling endpoint just for it — defer.
-- **Time zones.** All timestamps stored UTC; UI formats in user's local timezone. Session "day" for Calendar / Memento Mori bucketing follows the user's local-day boundary (stored on `User`).
-- **Aborted-session contribution to Memento Mori.** Should aborted sessions count their `effectiveDurationMs` toward weekly focus minutes, or be excluded? Leaning excluded — the duration is a fabrication.
+- **Time zones.** All timestamps stored UTC; UI formats in user's local timezone. Session "day" bucketing (for `/focus` history) follows the user's local-day boundary (stored on `User`).

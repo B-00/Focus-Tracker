@@ -27,6 +27,15 @@
 //       CREATE UNIQUE INDEX "FocusSession_userId_active_unique"
 //         ON "FocusSession" ("userId")
 //         WHERE state IN ('running', 'paused');
+//
+//   * {Routine,Dated}SectionDailyScore: at most one row per
+//     (userId, sectionId, date), treating NULL sectionId values as equal
+//     so Inbox rows de-dupe. Lives in the
+//     `20261106_nullable_section_score_pk` migration:
+//       CREATE UNIQUE INDEX "routine_section_daily_score_user_section_date_unique"
+//         ON "routine_section_daily_score" ("userId", "sectionId", "date")
+//         NULLS NOT DISTINCT;
+//     (same shape for dated_section_daily_score)
 
 generator client {
   provider = "prisma-client-js"
@@ -540,59 +549,68 @@ model WeekActivityMinutes {
   @@map("week_activity_minutes")
 }
 
-/// Per-day per-section routine score. Composite PK on (sectionId, date) so a
-/// range scan for the Section's chart series is a single index lookup.
+/// Per-day per-section routine score. Surrogate `id` PK; semantic uniqueness
+/// on (sectionId, date) enforced via a raw-SQL unique index with
+/// `NULLS NOT DISTINCT` so Inbox rows (sectionId = NULL) de-dupe just like
+/// section-bound rows. See MIGRATION note: Prisma 6.x can't express NULLS
+/// NOT DISTINCT in schema syntax — the index lives in a hand-written
+/// migration file (20261106_nullable_section_score_pk).
 ///
 /// Range: `score ∈ [-1.000, +2.000]`. Equals `baseScore` (routines have no
 /// backlog penalty). See TaskCharts.md §5.4.
 model RoutineSectionDailyScore {
-  sectionId       String
-  section         Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  sectionId       String?                                                 // null = Inbox (Tasks.md §3.4)
+  section         Section?  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date            DateTime @db.Date
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime  @db.Date
 
-  scheduledCount  Int                                                   // base-score denominator
+  scheduledCount  Int                                                    // base-score denominator
   completedCount  Int
-  scheduledWeight Decimal  @db.Decimal(6, 2)                            // informational ("max if all done")
-  completedWeight Decimal  @db.Decimal(6, 2)                            // base-score numerator
-  score           Decimal  @db.Decimal(4, 3)
-  runningTotal    Decimal  @db.Decimal(10, 3)
-  computedAt      DateTime @default(now())
+  scheduledWeight Decimal   @db.Decimal(6, 2)                            // informational ("max if all done")
+  completedWeight Decimal   @db.Decimal(6, 2)                            // base-score numerator
+  score           Decimal   @db.Decimal(4, 3)
+  runningTotal    Decimal   @db.Decimal(10, 3)
+  computedAt      DateTime  @default(now())
 
-  @@id([sectionId, date])
-  @@index([userId, date])                                               // /charts/routine/global aggregation
+  // Uniqueness per (userId, sectionId, date) lives in the raw-SQL migration
+  // because Prisma can't emit `NULLS NOT DISTINCT`. Keep these indexes in
+  // sync if the migration constraint changes.
+  @@index([userId, date])                                                // /charts/routine/global aggregation
   @@map("routine_section_daily_score")
 }
 
 /// Per-day per-section dated-family score. Adds backlog-penalty columns on
 /// top of the routine shape — see TaskCharts.md §5.4 for column purposes and
-/// §5.3 for the geometric-decay penalty formula.
+/// §5.3 for the geometric-decay penalty formula. Same surrogate-PK +
+/// nullable-sectionId shape as RoutineSectionDailyScore; see that model's
+/// comment for the NULLS NOT DISTINCT migration reference.
 ///
 /// Range: `score ∈ approximately [-4.000, +2.000]`.
 model DatedSectionDailyScore {
-  sectionId          String
-  section            Section       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  id                 String        @id @default(cuid())
+  sectionId          String?                                                 // null = Inbox (Tasks.md §3.4)
+  section            Section?      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   userId             String
   user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   date               DateTime      @db.Date
 
-  scheduledCount     Int                                                   // base-score denominator
+  scheduledCount     Int                                                    // base-score denominator
   completedCount     Int
-  scheduledWeight    Decimal       @db.Decimal(6, 2)                       // informational
-  completedWeight    Decimal       @db.Decimal(6, 2)                       // base-score numerator
+  scheduledWeight    Decimal       @db.Decimal(6, 2)                        // informational
+  completedWeight    Decimal       @db.Decimal(6, 2)                        // base-score numerator
 
-  backlogCount       Int                                                   // tasks entering Backlog tonight
-  backlogTopPriority TaskPriority?                                          // max priority in the backlog set; null when backlogCount=0
+  backlogCount       Int                                                    // tasks entering Backlog tonight
+  backlogTopPriority TaskPriority?                                           // max priority in the backlog set; null when backlogCount=0
 
-  baseScore          Decimal       @db.Decimal(4, 3)                       // [-1.000, +2.000]
-  backlogPenalty     Decimal       @db.Decimal(4, 3)                       // (-3.000, 0.000]
-  score              Decimal       @db.Decimal(5, 3)                       // baseScore + backlogPenalty
+  baseScore          Decimal       @db.Decimal(4, 3)                        // [-1.000, +2.000]
+  backlogPenalty     Decimal       @db.Decimal(4, 3)                        // (-3.000, 0.000]
+  score              Decimal       @db.Decimal(5, 3)                        // baseScore + backlogPenalty
   runningTotal       Decimal       @db.Decimal(10, 3)
   computedAt         DateTime      @default(now())
 
-  @@id([sectionId, date])
-  @@index([userId, date])                                                  // /charts/dated/global aggregation
+  @@index([userId, date])                                                   // /charts/dated/global aggregation
   @@map("dated_section_daily_score")
 }
 
