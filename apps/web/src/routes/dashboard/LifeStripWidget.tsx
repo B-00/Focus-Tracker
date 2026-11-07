@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchMeProfile, meQueryKeys } from '../../lib/me-api';
 import { computeLifeStats, parseBirthday } from '../../lib/life-math';
+import { useLifeColors } from '../../lib/life-colors';
 import { useWidgetCollapsed } from './widget-collapse';
 import { WidgetCollapseToggle } from './WidgetCollapseToggle';
 import { WidgetReorderControls } from './WidgetReorderControls';
@@ -98,6 +99,8 @@ function YearStrip({
 }: {
   stats: ReturnType<typeof computeLifeStats>;
 }) {
+  const colors = useLifeColors();
+
   // Highlight the current year's row. Degenerate case: if the user set
   // a future birthday or a lifespan they've already exceeded, just show
   // the first or last row respectively.
@@ -127,16 +130,16 @@ function YearStrip({
           const col = idx - yearStart;
           const isCurrent = col === colInYear && idx === safeWeek;
           const isPast = idx < safeWeek;
+          const bg = isCurrent
+            ? colors.thisWeek
+            : isPast
+              ? colors.lived
+              : colors.remaining;
           return (
             <div
               key={idx}
-              className={
-                isCurrent
-                  ? 'bg-emerald-400 rounded-[1px]'
-                  : isPast
-                    ? 'bg-neutral-600 rounded-[1px]'
-                    : 'bg-neutral-800 rounded-[1px]'
-              }
+              className="rounded-[1px]"
+              style={{ backgroundColor: bg }}
             />
           );
         })}
