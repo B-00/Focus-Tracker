@@ -6,11 +6,13 @@ import {
   tasksQueryKeys,
   toggleTaskCompletion,
 } from '../../lib/tasks-api';
+import { EditTaskForm } from './EditTaskForm';
 import { PriorityBadge } from './PriorityBadge';
 import { usePriorityColors, withAlpha } from './priority-colors';
 
 // One row in a Dated / Ongoing panel. Checkbox → toggles completion with
-// optimistic UI. Trash icon → confirm-then-delete (hard, no trash).
+// optimistic UI. Edit → inline form. Trash icon → confirm-then-delete
+// (hard, no trash).
 //
 // Keeps mutation plumbing colocated so the TaskRow is drop-in anywhere
 // (panel, dashboard widget, backlog) without extra wiring.
@@ -26,6 +28,7 @@ export function TaskRow({ task, showDate = true }: TaskRowProps) {
   const qc = useQueryClient();
   const colors = usePriorityColors();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const toggleMutation = useMutation({
     mutationFn: () => toggleTaskCompletion(task.id, task.completedAt === null),
@@ -42,6 +45,18 @@ export function TaskRow({ task, showDate = true }: TaskRowProps) {
   });
 
   const completed = task.completedAt !== null;
+
+  if (editing) {
+    return (
+      <li className="px-2 py-1.5">
+        <EditTaskForm
+          task={task}
+          onCancel={() => setEditing(false)}
+          onSaved={() => setEditing(false)}
+        />
+      </li>
+    );
+  }
 
   return (
     <li
@@ -93,15 +108,29 @@ export function TaskRow({ task, showDate = true }: TaskRowProps) {
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmingDelete(true)}
-            className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300"
-            aria-label={`Delete "${task.title}"`}
-            title="Delete"
-          >
-            ✕
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmingDelete(false);
+                setEditing(true);
+              }}
+              className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300"
+              aria-label={`Edit "${task.title}"`}
+              title="Edit"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300"
+              aria-label={`Delete "${task.title}"`}
+              title="Delete"
+            >
+              ✕
+            </button>
+          </>
         )}
       </div>
     </li>
