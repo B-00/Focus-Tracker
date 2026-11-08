@@ -120,7 +120,7 @@ export class UsersService {
   ): Promise<MeProfileResponse> {
     const current = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { timezoneOverridden: true },
+      select: { timezoneOverridden: true, birthday: true },
     });
     if (!current) throw new NotFoundException({ error: 'user_not_found' });
 
@@ -145,8 +145,14 @@ export class UsersService {
     if (input.displayName !== undefined) {
       data.displayName = input.displayName;
     }
+    let birthdayChanged = false;
     if (input.birthday !== undefined) {
-      data.birthday = input.birthday ? new Date(input.birthday) : null;
+      const nextBirthday = input.birthday ? new Date(input.birthday) : null;
+      data.birthday = nextBirthday;
+      // Compare to the currently stored value — both may be null.
+      const prevMs = current.birthday ? current.birthday.getTime() : null;
+      const nextMs = nextBirthday ? nextBirthday.getTime() : null;
+      birthdayChanged = prevMs !== nextMs;
     }
     if (input.lifeExpectancyYears !== undefined) {
       data.lifeExpectancyYears = input.lifeExpectancyYears;
@@ -155,6 +161,22 @@ export class UsersService {
     if (Object.keys(data).length > 0) {
       await this.prisma.user.update({ where: { id: userId }, data });
     }
+
+    // Changing birthday shifts every weekIndex, so the per-week
+    // aggregates keyed on the old birthday are now stale ghosts in the
+    // life grid. Drop them; the next GET /v1/life/grid triggers the
+    // on-read refresh which re-aggregates against the new birthday.
+    // ponytail: deletion here (vs calling LifeService) keeps UsersService
+    // free of cross-module wiring; the life-grid read path self-heals.
+    // Milestones/WeekNotes are intentionally untouched — those are
+    // user-entered against a specific life-week semantic, not a
+    // computed cache, so a birthday change CAN shift what real date
+    // they refer to (acceptable in v1; migration logic would be a
+    // separate feature).
+    if (birthdayChanged) {
+      await this.prisma.weekActivityMinutes.deleteMany({ where: { userId } });
+    }
+
     return this.getProfile(userId);
   }
 

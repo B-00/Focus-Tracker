@@ -114,8 +114,8 @@ export class LifeService {
   //  Refresh path — called by scheduler + on-read fallback
   // ---------------------------------------------------------------------------
 
-  /// Upsert `week_activity_minutes` for one user. One row per week with
-  /// any telemetry rollup data. Idempotent — re-running produces
+  /// Rebuild `week_activity_minutes` for one user from
+  /// `activity_minute_rollup`. Idempotent — re-running produces
   /// identical rows.
   ///
   /// Why raw SQL: the aggregation key is `FLOOR((minuteBucket - birthday) / 1 week)`,
@@ -126,6 +126,14 @@ export class LifeService {
   /// a parameterised computed expression when the SELECT's textual form
   /// differs from the GROUP BY's — so we compute `week_index` once in
   /// `telemetry_rows` and aggregate on the alias in `telemetry_weeks`.
+  ///
+  /// ponytail: DELETE-then-INSERT in a single transaction instead of an
+  /// upsert so a birthday change doesn't leave orphan rows at the OLD
+  /// weekIndex positions (those positions aren't visited by the new
+  /// aggregation and would otherwise linger forever, painting ghost
+  /// heatmap tiles on the life grid). Upgrade path if write volume
+  /// ever matters: diff-only updates keyed on (weekIndex, totalMinutes),
+  /// but for personal-scale rollup counts the full rewrite is trivial.
   async refreshForUser(userId: string): Promise<{ weeksWritten: number }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -133,40 +141,39 @@ export class LifeService {
     });
     if (!user?.birthday) return { weeksWritten: 0 };
 
-    const result = await this.prisma.$executeRaw(Prisma.sql`
-      WITH wb AS (
-        SELECT ${userId}::text AS user_id, ${user.birthday}::timestamp AS birthday
-      ),
-      telemetry_rows AS (
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.weekActivityMinutes.deleteMany({ where: { userId } });
+      return tx.$executeRaw(Prisma.sql`
+        WITH wb AS (
+          SELECT ${userId}::text AS user_id, ${user.birthday}::timestamp AS birthday
+        ),
+        telemetry_rows AS (
+          SELECT
+            wb.user_id,
+            FLOOR(EXTRACT(EPOCH FROM (r."minuteBucket" - wb.birthday)) / ${SEC_PER_WEEK})::int AS week_index,
+            r."durationMs" AS duration_ms
+          FROM activity_minute_rollup r, wb
+          WHERE r."userId" = wb.user_id
+            AND r."minuteBucket" >= wb.birthday
+        ),
+        telemetry_weeks AS (
+          SELECT
+            user_id,
+            week_index,
+            (SUM(duration_ms) / 60000)::int AS total_minutes
+          FROM telemetry_rows
+          GROUP BY user_id, week_index
+        )
+        INSERT INTO week_activity_minutes ("userId", "weekIndex", "totalMinutes", "hasSessions", "computedAt")
         SELECT
-          wb.user_id,
-          FLOOR(EXTRACT(EPOCH FROM (r."minuteBucket" - wb.birthday)) / ${SEC_PER_WEEK})::int AS week_index,
-          r."durationMs" AS duration_ms
-        FROM activity_minute_rollup r, wb
-        WHERE r."userId" = wb.user_id
-          AND r."minuteBucket" >= wb.birthday
-      ),
-      telemetry_weeks AS (
-        SELECT
-          user_id,
-          week_index,
-          (SUM(duration_ms) / 60000)::int AS total_minutes
-        FROM telemetry_rows
-        GROUP BY user_id, week_index
-      )
-      INSERT INTO week_activity_minutes ("userId", "weekIndex", "totalMinutes", "hasSessions", "computedAt")
-      SELECT
-        tw.user_id,
-        tw.week_index,
-        tw.total_minutes,
-        FALSE,           -- session overlay removed; column stays for schema stability
-        NOW()
-      FROM telemetry_weeks tw
-      ON CONFLICT ("userId", "weekIndex") DO UPDATE
-        SET "totalMinutes" = EXCLUDED."totalMinutes",
-            "hasSessions"  = EXCLUDED."hasSessions",
-            "computedAt"   = NOW();
-    `);
+          tw.user_id,
+          tw.week_index,
+          tw.total_minutes,
+          FALSE,           -- session overlay removed; column stays for schema stability
+          NOW()
+        FROM telemetry_weeks tw;
+      `);
+    });
 
     return { weeksWritten: typeof result === 'number' ? result : 0 };
   }
