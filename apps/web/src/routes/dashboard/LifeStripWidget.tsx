@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchMeProfile, meQueryKeys } from '../../lib/me-api';
@@ -147,10 +147,15 @@ function YearStrip({
     >
       <div
         className="grid gap-[2px]"
-        style={{
-          gridTemplateColumns: 'repeat(52, 1fr)',
-          gridAutoRows: '8px',
-        }}
+        style={
+          {
+            gridTemplateColumns: 'repeat(52, 1fr)',
+            gridAutoRows: '8px',
+            '--c-m1': colors.m1,
+            '--c-m2': colors.m2,
+            '--c-m3': colors.m3,
+          } as CSSProperties
+        }
         aria-hidden="true"
       >
         {cells.map((idx) => {

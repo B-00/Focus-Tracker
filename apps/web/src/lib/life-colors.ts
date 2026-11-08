@@ -1,10 +1,11 @@
 import { useSyncExternalStore } from 'react';
 
-// User-local palette for the Memento Mori life grid. Seven roles:
+// User-local palette for the Memento Mori life grid. Ten roles:
 //   - lived: weeks already past WITHOUT telemetry data (incl. idle weeks)
 //   - thisWeek: the single highlighted current-week cell
 //   - remaining: future weeks still to come
 //   - h1..h4: 4 ascending heatmap tiers for past weeks WITH telemetry
+//   - m1..m3: milestone-count dots (1 / 2 / 3+ milestones on a week)
 //
 // Same shape + persistence as priority-colors.ts (localStorage + tiny
 // module-level store + useSyncExternalStore). Everything that paints
@@ -25,7 +26,10 @@ export type LifeColorRole =
   | 'h1'
   | 'h2'
   | 'h3'
-  | 'h4';
+  | 'h4'
+  | 'm1'
+  | 'm2'
+  | 'm3';
 
 export const DEFAULT_LIFE_COLORS: Record<LifeColorRole, string> = {
   lived: '#404040',     // neutral-700
@@ -38,6 +42,11 @@ export const DEFAULT_LIFE_COLORS: Record<LifeColorRole, string> = {
   h2: '#047857',        // emerald-700
   h3: '#10b981',        // emerald-500
   h4: '#6ee7b7',        // emerald-300 (brightest)
+  // Milestone-count dots. Distinct from heatmap greens so a busy week
+  // still reads as "something marked" rather than "lots of activity".
+  m1: '#3b82f6',        // blue-500
+  m2: '#ec4899',        // pink-500
+  m3: '#f59e0b',        // amber-500
 };
 
 const STORAGE_KEY = 'ft:life-colors:v1';

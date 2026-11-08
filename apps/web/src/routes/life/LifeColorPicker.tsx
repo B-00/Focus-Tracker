@@ -1,6 +1,5 @@
 import {
   DEFAULT_LIFE_COLORS,
-  resetLifeColors,
   setLifeColor,
   useLifeColors,
   type LifeColorRole,
@@ -34,6 +33,12 @@ export function LifeColorPicker() {
     ({ role }) => colors[role] !== DEFAULT_LIFE_COLORS[role],
   );
 
+  const resetGrid = () => {
+    for (const { role } of ROWS) {
+      setLifeColor(role, DEFAULT_LIFE_COLORS[role]);
+    }
+  };
+
   return (
     <section className="rounded border border-neutral-800 bg-neutral-900/40 p-3 w-fit">
       <header className="mb-2 flex items-start justify-between gap-2">
@@ -43,7 +48,7 @@ export function LifeColorPicker() {
         {isDirty && (
           <button
             type="button"
-            onClick={resetLifeColors}
+            onClick={resetGrid}
             className="shrink-0 rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-[0.65rem] text-neutral-300 hover:bg-neutral-800"
           >
             Reset

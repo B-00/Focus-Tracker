@@ -18,6 +18,7 @@ import { LIFE_SIZE_PRESETS, useLifeSize } from '../lib/life-size';
 import { LifeColorPicker } from './life/LifeColorPicker';
 import { LifeSizePicker } from './life/LifeSizePicker';
 import { LifeHeatmapColorPicker } from './life/LifeHeatmapColorPicker';
+import { LifeMilestoneColorPicker } from './life/LifeMilestoneColorPicker';
 import { LifeWeekModal } from './life/LifeWeekModal';
 import { LifeWeekFutureModal } from './life/LifeWeekFutureModal';
 import { fetchMilestones, milestoneQueryKeys } from '../lib/milestones-api';
@@ -227,10 +228,11 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
     return out;
   }, [lifeExpectancyYears]);
 
-  // ponytail (perf): publish 3 grid roles + 4 heatmap roles + 5 size
-  // dimensions as CSS vars. Cells + axis strips reference them via
-  // var(...) so a picker change is a single style update on <main> and a
-  // browser repaint — not a React re-render of the ~5000 cell subtree.
+  // ponytail (perf): publish 3 grid roles + 4 heatmap roles + 3
+  // milestone-count roles + 5 size dimensions as CSS vars. Cells +
+  // axis strips + milestone dots reference them via var(...) so a
+  // picker change is a single style update on <main> and a browser
+  // repaint — not a React re-render of the ~5000 cell subtree.
   const cssVars = {
     '--c-lived': colors.lived,
     '--c-this': colors.thisWeek,
@@ -239,6 +241,9 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
     '--c-h2': colors.h2,
     '--c-h3': colors.h3,
     '--c-h4': colors.h4,
+    '--c-m1': colors.m1,
+    '--c-m2': colors.m2,
+    '--c-m3': colors.m3,
     '--cell': `${size.cell}px`,
     '--cell-gap': `${size.gap}px`,
     '--block-gap': `${size.blockGap}px`,
@@ -329,6 +334,7 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
           <LifeSizePicker />
           <LifeColorPicker />
           <LifeHeatmapColorPicker />
+          <LifeMilestoneColorPicker />
         </aside>
       </div>
 
