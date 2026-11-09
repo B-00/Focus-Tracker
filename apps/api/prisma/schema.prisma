@@ -137,6 +137,7 @@ model User {
   lifeExpectancyYears Int       @default(80)
   timezone            String    @default("UTC")  // IANA tz name, e.g. "America/New_York"
   timezoneOverridden  Boolean   @default(false)  // false = auto-detected from browser
+  uiPrefs             Json      @default("{}")   // cosmetic picks synced across devices (shared/ui-prefs.ts)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 

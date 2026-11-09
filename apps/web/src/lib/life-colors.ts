@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isUiPrefPending, pushUiPref } from './ui-prefs-api';
 
 // User-local palette for the Memento Mori life grid. Ten roles:
 //   - lived: weeks already past WITHOUT telemetry data (incl. idle weeks)
@@ -15,9 +16,8 @@ import { useSyncExternalStore } from 'react';
 // from this single store — merge-over-defaults keeps older localStorage
 // blobs (pre-heatmap-picker shape) forward-compatible.
 //
-// ponytail: localStorage-only — picks don't sync across devices. Upgrade
-// path: move into UserDashboardPrefs or a dedicated LifePrefs table; the
-// hook contract here stays the same.
+// Synced across devices via `User.uiPrefs.lifeColors` (ui-prefs-api.ts);
+// localStorage stays as the first-paint cache.
 
 export type LifeColorRole =
   | 'lived'
@@ -74,25 +74,32 @@ function emit() {
   for (const l of listeners) l();
 }
 
-export function setLifeColor(role: LifeColorRole, hex: string) {
-  if (state[role] === hex) return;
-  state = { ...state, [role]: hex };
+function commit(next: Palette, push: boolean) {
+  state = next;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Storage disabled / full — fail silent, in-memory still updates.
   }
+  if (push) pushUiPref('lifeColors', state);
   emit();
 }
 
+export function setLifeColor(role: LifeColorRole, hex: string) {
+  if (state[role] === hex) return;
+  commit({ ...state, [role]: hex }, true);
+}
+
 export function resetLifeColors() {
-  state = { ...DEFAULT_LIFE_COLORS };
-  try {
-    window.localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ditto
-  }
-  emit();
+  commit({ ...DEFAULT_LIFE_COLORS }, true);
+}
+
+/// Apply the server copy (no echo PATCH). Missing on the server = first
+/// sync from this browser, so upload the local picks instead.
+export function hydrateLifeColors(remote: Partial<Palette> | undefined) {
+  if (isUiPrefPending('lifeColors')) return;
+  if (!remote) return pushUiPref('lifeColors', state);
+  commit({ ...DEFAULT_LIFE_COLORS, ...remote }, false);
 }
 
 function subscribe(cb: () => void): () => void {

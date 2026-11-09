@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { logoutAll as apiLogoutAll } from '../lib/auth-api';
+import { logout as apiLogout, logoutAll as apiLogoutAll } from '../lib/auth-api';
+import { tokenStorage } from '../lib/token-storage';
 import { useAuthStore } from '../stores/auth-store';
 import { AboutSection } from './settings/AboutSection';
 import { DashboardSection } from './settings/DashboardSection';
@@ -73,6 +74,22 @@ export function SettingsPage() {
     }
   }
 
+  /// This-browser-only sign out (mirror of the header button, which is
+  /// hidden on mobile). Best-effort server revoke, then always wipe local.
+  async function handleSignOut(): Promise<void> {
+    setSigningOutAll(true);
+    try {
+      const refresh = tokenStorage.getRefreshToken();
+      if (refresh) await apiLogout(refresh);
+    } catch {
+      // intentional — fall through to the local reset
+    } finally {
+      resetSession();
+      setSigningOutAll(false);
+      void navigate({ to: '/login' });
+    }
+  }
+
   // Sync to URL changes (back/forward, manual edit, deep-link from other
   // pages). We use a native hashchange listener instead of TanStack Router
   // hash because the spec wants replaceState (no history pollution) and
@@ -108,15 +125,26 @@ export function SettingsPage() {
             Preferences, account, and paired devices.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void handleLogOutOfAll()}
-          disabled={signingOutAll}
-          title="Revoke every active session for your account across all browsers and devices."
-          className="shrink-0 rounded-md border border-red-500/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-300 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
-        >
-          {signingOutAll ? 'Signing out…' : 'Log out of all'}
-        </button>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {/* Mobile-only: the header hides its Sign out below md. */}
+          <button
+            type="button"
+            onClick={() => void handleSignOut()}
+            disabled={signingOutAll}
+            className="whitespace-nowrap rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition hover:bg-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:opacity-50 md:hidden"
+          >
+            Sign out
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleLogOutOfAll()}
+            disabled={signingOutAll}
+            title="Revoke every active session for your account across all browsers and devices."
+            className="whitespace-nowrap rounded-md border border-red-500/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-300 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
+          >
+            {signingOutAll ? 'Signing out…' : 'Log out of all'}
+          </button>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[180px_1fr]">

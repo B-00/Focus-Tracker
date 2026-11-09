@@ -3,6 +3,7 @@ import type { Prisma, User } from '@prisma/client';
 import type {
   DashboardPrefsResponse,
   MeProfileResponse,
+  UiPrefs,
   UpdateDashboardPrefsRequest,
   UpdateMeProfileRequest,
 } from '@focus-tracker/shared';
@@ -221,6 +222,29 @@ export class UsersService {
       update: { widgetOrder, hiddenWidgets, collapsedWidgets },
     });
     return { widgetOrder, hiddenWidgets, collapsedWidgets };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  UI Prefs (shared/ui-prefs.ts)
+  // ---------------------------------------------------------------------------
+
+  async getUiPrefs(userId: string): Promise<UiPrefs> {
+    const row = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { uiPrefs: true },
+    });
+    if (!row) throw new NotFoundException({ error: 'user_not_found' });
+    return row.uiPrefs as UiPrefs;
+  }
+
+  /// Top-level merge via jsonb `||` in one statement — atomic, so two
+  /// stores PATCHing different slices at once can't lose each other's write.
+  async patchUiPrefs(userId: string, input: UiPrefs): Promise<UiPrefs> {
+    const rows = await this.prisma.$queryRaw<{ uiPrefs: UiPrefs }[]>`
+      UPDATE "User" SET "uiPrefs" = "uiPrefs" || ${JSON.stringify(input)}::jsonb
+      WHERE id = ${userId} RETURNING "uiPrefs"`;
+    if (!rows[0]) throw new NotFoundException({ error: 'user_not_found' });
+    return rows[0].uiPrefs;
   }
 }
 

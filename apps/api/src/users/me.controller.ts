@@ -11,11 +11,13 @@ import {
 } from '@nestjs/common';
 import {
   changePasswordRequestSchema,
+  uiPrefsSchema,
   updateDashboardPrefsRequestSchema,
   updateMeProfileRequestSchema,
   type ChangePasswordRequest,
   type DashboardPrefsResponse,
   type MeProfileResponse,
+  type UiPrefs,
   type UpdateDashboardPrefsRequest,
   type UpdateMeProfileRequest,
 } from '@focus-tracker/shared';
@@ -90,5 +92,21 @@ export class MeController {
     body: UpdateDashboardPrefsRequest,
   ): Promise<DashboardPrefsResponse> {
     return this.users.upsertDashboardPrefs(user.userId, body);
+  }
+
+  /// GET /v1/me/ui-prefs — cosmetic picks; `{}` for a fresh account.
+  @Get('ui-prefs')
+  getUiPrefs(@CurrentUser() user: JwtRequestContext): Promise<UiPrefs> {
+    return this.users.getUiPrefs(user.userId);
+  }
+
+  /// PATCH /v1/me/ui-prefs — top-level merge; each sent slice replaces
+  /// that slice wholesale.
+  @Patch('ui-prefs')
+  patchUiPrefs(
+    @CurrentUser() user: JwtRequestContext,
+    @Body(new ZodBodyPipe(uiPrefsSchema)) body: UiPrefs,
+  ): Promise<UiPrefs> {
+    return this.users.patchUiPrefs(user.userId, body);
   }
 }

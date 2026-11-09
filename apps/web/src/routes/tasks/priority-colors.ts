@@ -1,15 +1,12 @@
 import { useSyncExternalStore } from 'react';
 import type { TaskPriority } from '@focus-tracker/shared';
+import { isUiPrefPending, pushUiPref } from '../../lib/ui-prefs-api';
 
-// User-local palette for priority chips + row tints. Persisted in
-// localStorage so a reload keeps the user's picks. Shared via a tiny
-// module-level store + useSyncExternalStore so every TaskRow /
-// PriorityBadge / picker swatch rerenders the instant a color changes.
-//
-// ponytail: localStorage-only means picks don't sync across devices or
-// browsers. Upgrade path if ever wanted: move this map into the user's
-// server-side settings and swap the storage layer here — the hook
-// contract stays the same.
+// Per-user palette for priority chips + row tints. Synced across devices
+// via `User.uiPrefs.priorityColors` (ui-prefs-api.ts), with localStorage
+// as the first-paint cache. Shared via a tiny module-level store +
+// useSyncExternalStore so every TaskRow / PriorityBadge / picker swatch
+// rerenders the instant a color changes.
 
 export const DEFAULT_PRIORITY_COLORS: Record<TaskPriority, string> = {
   extreme: '#ef4444', // red-500
@@ -43,25 +40,32 @@ function emit() {
   for (const l of listeners) l();
 }
 
-export function setPriorityColor(priority: TaskPriority, hex: string) {
-  if (state[priority] === hex) return;
-  state = { ...state, [priority]: hex };
+function commit(next: Palette, push: boolean) {
+  state = next;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Storage disabled / full — fail silent, in-memory still updates.
   }
+  if (push) pushUiPref('priorityColors', state);
   emit();
 }
 
+export function setPriorityColor(priority: TaskPriority, hex: string) {
+  if (state[priority] === hex) return;
+  commit({ ...state, [priority]: hex }, true);
+}
+
 export function resetPriorityColors() {
-  state = { ...DEFAULT_PRIORITY_COLORS };
-  try {
-    window.localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ditto
-  }
-  emit();
+  commit({ ...DEFAULT_PRIORITY_COLORS }, true);
+}
+
+/// Apply the server copy (no echo PATCH). Missing on the server = first
+/// sync from this browser, so upload the local picks instead.
+export function hydratePriorityColors(remote: Partial<Palette> | undefined) {
+  if (isUiPrefPending('priorityColors')) return;
+  if (!remote) return pushUiPref('priorityColors', state);
+  commit({ ...DEFAULT_PRIORITY_COLORS, ...remote }, false);
 }
 
 function subscribe(cb: () => void): () => void {
