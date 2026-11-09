@@ -31,8 +31,9 @@ export const MilestoneMarker = memo(function MilestoneMarker({
       className="pointer-events-none absolute -right-0.5 -top-0.5 rounded-full ring-1 ring-black/40"
       style={{
         backgroundColor: markerVar(count),
-        width: size,
-        height: size,
+        // Never bigger than the cell: auto-fit grids on phones go ~5px.
+        width: `min(${size}px, var(--cell, ${size}px))`,
+        height: `min(${size}px, var(--cell, ${size}px))`,
       }}
     />
   );

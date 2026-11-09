@@ -1,7 +1,9 @@
 import {
   LIFE_SIZE_PRESETS,
+  lifePresetFits,
   setLifeSize,
   useLifeSize,
+  useViewportWidth,
   type LifeSize,
 } from '../../lib/life-size';
 
@@ -19,6 +21,7 @@ const SIZES: { id: LifeSize; label: string }[] = [
 
 export function LifeSizePicker() {
   const current = useLifeSize();
+  const fits = lifePresetFits(LIFE_SIZE_PRESETS[current], useViewportWidth());
 
   return (
     <section className="rounded border border-neutral-800 bg-neutral-900/40 p-3 w-56 xl:w-fit">
@@ -61,6 +64,9 @@ export function LifeSizePicker() {
           );
         })}
       </div>
+      {!fits && (
+        <p className="mt-2 text-[0.65rem] text-neutral-500">Shrunk to fit this screen</p>
+      )}
     </section>
   );
 }

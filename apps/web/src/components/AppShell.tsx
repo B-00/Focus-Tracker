@@ -95,12 +95,17 @@ function AppHeader() {
       <div className="mx-auto flex h-12 max-w-5xl items-center gap-4 px-4">
         <Link
           to="/"
-          className="text-sm font-semibold tracking-tight text-neutral-100 hover:text-white"
+          className="shrink-0 whitespace-nowrap text-sm font-semibold tracking-tight text-neutral-100 hover:text-white"
         >
           Focus Tracker
         </Link>
 
-        <nav className="flex items-center gap-1 text-sm" aria-label="Primary">
+        {/* min-w-0 + overflow-x-auto: on phones the links scroll inside
+            the header instead of widening the whole page. */}
+        <nav
+          className="flex min-w-0 items-center gap-1 overflow-x-auto text-sm [scrollbar-width:none]"
+          aria-label="Primary"
+        >
           <NavLink to="/" label="Dashboard" active={location === '/'} />
           <NavLink
             to="/activity"
@@ -168,7 +173,7 @@ function NavLink({ to, label, active, badge }: NavLinkProps) {
   return (
     <Link
       to={to}
-      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
         active
           ? 'bg-neutral-800 text-neutral-100'
           : 'text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200'
