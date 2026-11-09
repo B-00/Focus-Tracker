@@ -48,6 +48,66 @@ export const LIFE_SIZE_PRESETS: Record<LifeSize, LifeSizePreset> = {
   },
 };
 
+// ---------------------------------------------------------------------------
+//  Viewport fit (phones / tablets)
+// ---------------------------------------------------------------------------
+//
+// The grid is always 52 columns, so even S (~550px) overflows a phone.
+// Below FIT_BELOW_PX the saved preset is a *max*: if it doesn't fit the
+// available width, cells + gaps shrink (from the compact S axis) until
+// it does. Desktop keeps the exact preset; the saved pick is untouched,
+// so one synced preference gives each device its own effective size.
+//
+// ponytail: fit is viewport-based, not measured. Assumes the single-
+// column < xl layout of /life (grid spans <main>'s content box). At ≥ xl
+// the rails sit beside the grid and the preset is used as-is.
+
+export const FIT_BELOW_PX = 1280; // Tailwind xl — matches Life.tsx layout switch
+const MAIN_MAX_W = 1400; // <main className="max-w-[1400px]">
+const MAIN_PAD_X = 32; // px-4 on both sides
+
+/// Rendered grid width: year axis + axis gap + 52 cells + 50 in-half gaps
+/// + the mid-year block gap.
+export function lifeGridWidth(p: LifeSizePreset): number {
+  return p.axisW + 52 * p.cell + 51 * p.gap + p.blockGap;
+}
+
+/// Width available to the grid for a given viewport width (clientWidth).
+export function lifeGridAvailable(viewportW: number): number {
+  return Math.min(viewportW, MAIN_MAX_W) - MAIN_PAD_X;
+}
+
+/// True when `p` renders unscaled at this viewport width.
+export function lifePresetFits(p: LifeSizePreset, viewportW: number): boolean {
+  return viewportW >= FIT_BELOW_PX || lifeGridWidth(p) <= lifeGridAvailable(viewportW);
+}
+
+/// The preset actually rendered at this viewport width.
+export function fitLifePreset(p: LifeSizePreset, viewportW: number): LifeSizePreset {
+  if (lifePresetFits(p, viewportW)) return p;
+  const s = LIFE_SIZE_PRESETS.s;
+  const avail = lifeGridAvailable(viewportW);
+  // Whole-pixel gaps keep the lattice crisp; only the cell goes fractional.
+  const gap = 1;
+  const blockGap = Math.max(3, Math.round((s.blockGap * avail) / lifeGridWidth(s)));
+  const cell = Math.floor(((avail - s.axisW - 51 * gap - blockGap) / 52) * 100) / 100;
+  return { ...s, cell: Math.max(2, cell), gap, blockGap };
+}
+
+function subscribeViewport(cb: () => void): () => void {
+  window.addEventListener('resize', cb);
+  return () => window.removeEventListener('resize', cb);
+}
+
+/// Viewport width excluding the scrollbar (clientWidth), re-read on resize.
+export function useViewportWidth(): number {
+  return useSyncExternalStore(
+    subscribeViewport,
+    () => document.documentElement.clientWidth,
+    () => FIT_BELOW_PX,
+  );
+}
+
 export const DEFAULT_LIFE_SIZE: LifeSize = 'm';
 const ORDER: readonly LifeSize[] = ['s', 'm', 'l', 'xl'];
 const STORAGE_KEY = 'ft:life-size:v1';
@@ -107,4 +167,23 @@ function getSnapshot(): LifeSize {
 
 export function useLifeSize(): LifeSize {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+// Self-check: fitted grid never overflows common phone/tablet widths, and
+// presets that already fit (or desktop) pass through unchanged.
+if (import.meta.env?.DEV) {
+  for (const vw of [320, 360, 390, 430, 768, 820, 1024, 1279]) {
+    for (const id of ORDER) {
+      const fitted = fitLifePreset(LIFE_SIZE_PRESETS[id], vw);
+      if (lifeGridWidth(fitted) > lifeGridAvailable(vw)) {
+        // eslint-disable-next-line no-console
+        console.warn('[life-size] fit overflows', { vw, id, w: lifeGridWidth(fitted) });
+      }
+    }
+  }
+  if (fitLifePreset(LIFE_SIZE_PRESETS.xl, 1440) !== LIFE_SIZE_PRESETS.xl
+    || fitLifePreset(LIFE_SIZE_PRESETS.s, 768) !== LIFE_SIZE_PRESETS.s) {
+    // eslint-disable-next-line no-console
+    console.warn('[life-size] fitting preset was rescaled');
+  }
 }

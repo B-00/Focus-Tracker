@@ -14,7 +14,12 @@ import { fetchMeProfile, meQueryKeys } from '../lib/me-api';
 import { fetchLifeGrid, lifeQueryKeys } from '../lib/life-api';
 import { computeLifeStats, parseBirthday, weekRange } from '../lib/life-math';
 import { useLifeColors } from '../lib/life-colors';
-import { LIFE_SIZE_PRESETS, useLifeSize } from '../lib/life-size';
+import {
+  fitLifePreset,
+  LIFE_SIZE_PRESETS,
+  useLifeSize,
+  useViewportWidth,
+} from '../lib/life-size';
 import { LifeColorPicker } from './life/LifeColorPicker';
 import { LifeSizePicker } from './life/LifeSizePicker';
 import { LifeHeatmapColorPicker } from './life/LifeHeatmapColorPicker';
@@ -148,7 +153,8 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
   );
   const colors = useLifeColors();
   const sizeKey = useLifeSize();
-  const size = LIFE_SIZE_PRESETS[sizeKey];
+  // Saved preset is a max below xl — shrinks to fit phones / tablets.
+  const size = fitLifePreset(LIFE_SIZE_PRESETS[sizeKey], useViewportWidth());
 
   const totalWeeks = stats.totalWeeks;
   // Clamp currentWeekIndex into [0, totalWeeks) so a future birthday or an
