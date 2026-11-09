@@ -1,21 +1,22 @@
 import type { TaskPriority } from '@focus-tracker/shared';
 import { usePriorityColors, withAlpha } from './priority-colors';
+import { iconFor, usePriorityIcons } from './priority-icons';
 
-// Priority badge — color + glyph + label, consistent across every surface
+// Priority badge — color + icon + label, consistent across every surface
 // (/tasks, /calendar, /backlog, dashboard widgets). See Tasks.md §3.6.
 //
 // Accessibility: color is NEVER the sole indicator. Each badge carries
 // the priority label as readable text and an aria-label matching the
 // spec's keyboard-nav rules.
 //
-// Colors come from the user-local palette hook (priority-colors.ts) so
-// a swap in the Change Task Color picker instantly repaints every badge.
+// Colors and icons come from the user-local stores so a swap in the
+// rail legends instantly repaints every badge.
 
-const META: Record<TaskPriority, { glyph: string; label: string }> = {
-  extreme: { glyph: '▲▲', label: 'Extreme' },
-  high: { glyph: '▲', label: 'High' },
-  mid: { glyph: '●', label: 'Mid' },
-  low: { glyph: '▽', label: 'Low' },
+const LABELS: Record<TaskPriority, string> = {
+  extreme: 'Extreme',
+  high: 'High',
+  mid: 'Mid',
+  low: 'Low',
 };
 
 export const PRIORITY_SORT_INDEX: Record<TaskPriority, number> = {
@@ -24,6 +25,21 @@ export const PRIORITY_SORT_INDEX: Record<TaskPriority, number> = {
   mid: 2,
   low: 3,
 };
+
+/// Compact Lucide glyph for surfaces that already apply color themselves
+/// (calendar bars, tooltips). Subscribes to the icon store so a legend
+/// pick repaints those spots too.
+export function PriorityIcon({
+  priority,
+  size = 12,
+}: {
+  priority: TaskPriority;
+  size?: number;
+}) {
+  const icons = usePriorityIcons();
+  const Icon = iconFor(icons[priority]);
+  return <Icon size={size} strokeWidth={2.5} aria-hidden />;
+}
 
 interface PriorityBadgeProps {
   priority: TaskPriority;
@@ -37,7 +53,9 @@ export function PriorityBadge({
   variant = 'chip',
 }: PriorityBadgeProps) {
   const colors = usePriorityColors();
-  const m = META[priority];
+  const icons = usePriorityIcons();
+  const label = LABELS[priority];
+  const Icon = iconFor(icons[priority]);
   const hex = colors[priority];
   const style = {
     backgroundColor: withAlpha(hex, 0.2),
@@ -48,12 +66,12 @@ export function PriorityBadge({
   if (variant === 'glyph') {
     return (
       <span
-        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[0.65rem] font-semibold"
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border"
         style={style}
-        aria-label={`${m.label} priority`}
-        title={`${m.label} priority`}
+        aria-label={`${label} priority`}
+        title={`${label} priority`}
       >
-        {m.glyph}
+        <Icon size={12} strokeWidth={2.5} aria-hidden />
       </span>
     );
   }
@@ -61,10 +79,10 @@ export function PriorityBadge({
     <span
       className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide"
       style={style}
-      aria-label={`${m.label} priority`}
+      aria-label={`${label} priority`}
     >
-      <span aria-hidden="true">{m.glyph}</span>
-      <span>{m.label}</span>
+      <Icon size={11} strokeWidth={2.5} aria-hidden />
+      <span>{label}</span>
     </span>
   );
 }

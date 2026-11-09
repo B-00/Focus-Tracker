@@ -21,6 +21,7 @@ import {
 import { BacklogRow } from './tasks/BacklogRow';
 import { PRIORITY_SORT_INDEX } from './tasks/PriorityBadge';
 import { PriorityColorPicker } from './tasks/PriorityColorPicker';
+import { PriorityIconPicker } from './tasks/PriorityIconPicker';
 import { RoutineRow } from './tasks/RoutineRow';
 import { SectionBlock } from './tasks/SectionBlock';
 import { TopOfTasksCharts } from './tasks/charts/TopOfTasksCharts';
@@ -79,7 +80,7 @@ export function TasksPage() {
     todayInstancesQuery.isError;
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-6">
+    <main className="mx-auto max-w-6xl px-4 py-6">
       <header className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-neutral-100">Tasks</h1>
@@ -98,31 +99,39 @@ export function TasksPage() {
       )}
 
       {!isLoading && !isError && (
-        <div className="flex flex-col gap-8">
-          <TopOfTasksCharts />
-          <KindPanel
-            title="Routine"
-            kind="routine"
-            tasks={routineQuery.data ?? []}
-            sections={sectionsQuery.data ?? []}
-            todayInstances={todayInstancesQuery.data ?? []}
-          />
-          <KindPanel
-            title="Dated"
-            kind="dated"
-            tasks={datedQuery.data ?? []}
-            sections={sectionsQuery.data ?? []}
-          />
-          <KindPanel
-            title="Ongoing"
-            kind="ongoing"
-            tasks={ongoingQuery.data ?? []}
-            sections={sectionsQuery.data ?? []}
-          />
-          {backlogPanelQuery.data && backlogPanelQuery.data.tasks.length > 0 && (
-            <BacklogPanel tasks={backlogPanelQuery.data.tasks} />
-          )}
-          <PriorityColorPicker />
+        <div className="flex flex-col gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start xl:gap-6">
+          <div className="order-2 flex min-w-0 flex-col gap-8 xl:order-none">
+            <TopOfTasksCharts />
+            <KindPanel
+              title="Routine"
+              kind="routine"
+              tasks={routineQuery.data ?? []}
+              sections={sectionsQuery.data ?? []}
+              todayInstances={todayInstancesQuery.data ?? []}
+            />
+            <KindPanel
+              title="Dated"
+              kind="dated"
+              tasks={datedQuery.data ?? []}
+              sections={sectionsQuery.data ?? []}
+            />
+            <KindPanel
+              title="Ongoing"
+              kind="ongoing"
+              tasks={ongoingQuery.data ?? []}
+              sections={sectionsQuery.data ?? []}
+            />
+            {backlogPanelQuery.data && backlogPanelQuery.data.tasks.length > 0 && (
+              <BacklogPanel tasks={backlogPanelQuery.data.tasks} />
+            )}
+          </div>
+          <aside
+            aria-label="Task color and icon settings"
+            className="order-1 flex w-full flex-row flex-wrap items-start justify-end gap-2 xl:sticky xl:top-16 xl:w-auto xl:flex-col xl:justify-start xl:self-start"
+          >
+            <PriorityColorPicker />
+            <PriorityIconPicker />
+          </aside>
         </div>
       )}
     </main>

@@ -182,17 +182,25 @@ export function EditTaskForm({ task, onCancel, onSaved }: Props) {
               className="rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-neutral-200"
             />
           </label>
-          {isSingleDay && (
-            <label className="flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={transferIfMissed}
-                onChange={(e) => setTransferIfMissed(e.target.checked)}
-                className="h-3 w-3 rounded border-neutral-600 bg-neutral-900 accent-emerald-500"
-              />
-              <span>Transfer if missed</span>
-            </label>
-          )}
+          <label
+            className={`ml-auto flex items-center gap-1 ${
+              isSingleDay ? '' : 'cursor-not-allowed opacity-40'
+            }`}
+            title={
+              isSingleDay
+                ? 'Roll this task to the next day if it is still incomplete at midnight'
+                : 'Transfer if missed is only valid on single-day tasks — clear End to enable'
+            }
+          >
+            <input
+              type="checkbox"
+              checked={isSingleDay && transferIfMissed}
+              disabled={!isSingleDay}
+              onChange={(e) => setTransferIfMissed(e.target.checked)}
+              className="h-3 w-3 rounded border-neutral-600 bg-neutral-900 accent-emerald-500 disabled:cursor-not-allowed"
+            />
+            <span>Transfer if missed</span>
+          </label>
         </div>
       )}
 

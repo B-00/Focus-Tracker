@@ -18,7 +18,7 @@ import {
   tasksQueryKeys,
   updateTask,
 } from '../lib/tasks-api';
-import { PRIORITY_SORT_INDEX } from './tasks/PriorityBadge';
+import { PRIORITY_SORT_INDEX, PriorityIcon } from './tasks/PriorityBadge';
 import {
   usePriorityColors,
   withAlpha,
@@ -80,13 +80,6 @@ const CELL_BAR_BOTTOM_PX = 10;
 const CELL_MIN_HEIGHT_PX = 96; // = 6rem, matches slices 1–4
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const PRIORITY_GLYPH = {
-  extreme: '▲▲',
-  high: '▲',
-  mid: '●',
-  low: '▽',
-} as const;
 
 const INBOX_COLOR = '#737373'; // neutral-500, matches other "no section" surfaces
 
@@ -506,10 +499,10 @@ function DayTooltip({ dateLabel, tasks, sectionsById }: DayTooltipProps) {
             >
               <span
                 aria-hidden
-                className="shrink-0 font-semibold"
+                className="shrink-0"
                 style={{ color: priorityColors[t.priority] }}
               >
-                {PRIORITY_GLYPH[t.priority]}
+                <PriorityIcon priority={t.priority} size={11} />
               </span>
               <span className="flex-1">
                 <span className="block">{t.title}</span>
@@ -549,7 +542,6 @@ function BarSegment({ segment, weekDays, section, onRequestEdit }: BarSegmentPro
   const fill = section?.color ?? INBOX_COLOR;
   const priorityHex = priorityColors[task.priority];
   const sectionName = section?.name ?? 'Inbox';
-  const glyph = PRIORITY_GLYPH[task.priority];
   const completed = task.completedAt !== null;
   const cellSpan = endCol - startCol + 1;
   const ariaLabel = `Edit ${capitalize(task.priority)} priority task — ${task.title} — ${sectionName}${
@@ -572,7 +564,7 @@ function BarSegment({ segment, weekDays, section, onRequestEdit }: BarSegmentPro
       type="button"
       onClick={handleClick}
       aria-label={ariaLabel}
-      title={`${glyph} ${task.title} · ${sectionName}`}
+      title={`${task.title} · ${sectionName}`}
       style={{
         gridColumnStart: startCol + 1,
         gridColumnEnd: endCol + 2,
@@ -596,8 +588,8 @@ function BarSegment({ segment, weekDays, section, onRequestEdit }: BarSegmentPro
           ←
         </span>
       )}
-      <span aria-hidden className="shrink-0 font-semibold" style={{ color: priorityHex }}>
-        {glyph}
+      <span aria-hidden className="shrink-0" style={{ color: priorityHex }}>
+        <PriorityIcon priority={task.priority} size={11} />
       </span>
       <span className="flex-1 truncate">{task.title}</span>
       {continuesRight && (
@@ -907,10 +899,10 @@ function ExistingTaskRow({
     >
       <span
         aria-hidden
-        className="shrink-0 font-semibold"
+        className="shrink-0"
         style={{ color: priorityColors[task.priority] }}
       >
-        {PRIORITY_GLYPH[task.priority]}
+        <PriorityIcon priority={task.priority} size={11} />
       </span>
       <button
         type="button"
