@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useTimezoneAutoDetect } from '../hooks/useTimezoneAutoDetect';
@@ -6,6 +6,11 @@ import { logout as apiLogout } from '../lib/auth-api';
 import { StickySessionBar } from '../routes/focus/StickySessionBar';
 import { backlogQueryKeys, listBacklog } from '../lib/tasks-api';
 import { tokenStorage } from '../lib/token-storage';
+import { fetchUiPrefs } from '../lib/ui-prefs-api';
+import { hydrateLifeColors } from '../lib/life-colors';
+import { hydrateLifeSize } from '../lib/life-size';
+import { hydratePriorityColors } from '../routes/tasks/priority-colors';
+import { hydratePriorityIcons } from '../routes/tasks/priority-icons';
 import { useAuthStore } from '../stores/auth-store';
 
 // The authenticated app shell. Wraps every protected route so users always
@@ -24,6 +29,18 @@ export function AppShell(): ReactNode {
   // authenticated session. See Settings.md §4.1.1 and useTimezoneAutoDetect
   // for the policy (no-op once `timezoneOverridden = true`).
   useTimezoneAutoDetect();
+  // Pull cross-device cosmetic prefs once per authenticated mount. Stores
+  // already painted from localStorage; this just reconciles with the server.
+  useEffect(() => {
+    fetchUiPrefs()
+      .then((p) => {
+        hydrateLifeColors(p.lifeColors);
+        hydrateLifeSize(p.lifeSize);
+        hydratePriorityColors(p.priorityColors);
+        hydratePriorityIcons(p.priorityIcons);
+      })
+      .catch((err: unknown) => console.warn('[ui-prefs] GET failed; using local', err));
+  }, []);
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
   return (
     <div className="min-h-screen text-neutral-100">
@@ -123,7 +140,8 @@ function AppHeader() {
           />
         </nav>
 
-        <div className="ml-auto flex items-center gap-3">
+        {/* Mobile: the nav fills the header, so Sign out moves to Settings. */}
+        <div className="ml-auto hidden shrink-0 items-center gap-3 md:flex">
           <button
             type="button"
             onClick={() => void handleSignOut()}

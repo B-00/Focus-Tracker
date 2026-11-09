@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isUiPrefPending, pushUiPref } from './ui-prefs-api';
 
 // Grid-size preference for the Memento Mori view. Four tiers (S/M/L/XL).
 // Published as CSS variables by <LifeGrid> so changing the size is a
@@ -69,7 +70,7 @@ function emit() {
   for (const l of listeners) l();
 }
 
-export function setLifeSize(size: LifeSize) {
+function commit(size: LifeSize, push: boolean) {
   if (state === size) return;
   state = size;
   try {
@@ -77,7 +78,20 @@ export function setLifeSize(size: LifeSize) {
   } catch {
     // Storage disabled — in-memory still updates for this session.
   }
+  if (push) pushUiPref('lifeSize', size);
   emit();
+}
+
+export function setLifeSize(size: LifeSize) {
+  commit(size, true);
+}
+
+/// Apply the server copy (synced via `User.uiPrefs.lifeSize`). Missing on
+/// the server = first sync from this browser, so upload the local pick.
+export function hydrateLifeSize(remote: LifeSize | undefined) {
+  if (isUiPrefPending('lifeSize')) return;
+  if (!remote) return pushUiPref('lifeSize', state);
+  commit(remote, false);
 }
 
 function subscribe(cb: () => void): () => void {

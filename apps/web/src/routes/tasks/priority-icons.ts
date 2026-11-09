@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { TaskPriority } from '@focus-tracker/shared';
+import { isUiPrefPending, pushUiPref } from '../../lib/ui-prefs-api';
 import {
   AlertTriangle,
   ArrowDown,
@@ -23,8 +24,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-// User-local Lucide icon per priority. Same store shape as
-// priority-colors.ts (localStorage + useSyncExternalStore) so a pick
+// Per-user Lucide icon per priority, synced via `User.uiPrefs.priorityIcons`.
+// Same store shape as priority-colors.ts (localStorage cache + server
+// sync + useSyncExternalStore) so a pick
 // in the Priority icons legend instantly repaints every badge, row,
 // and calendar bar.
 //
@@ -78,18 +80,21 @@ export function iconFor(name: string): LucideIcon {
   return ICON_BY_NAME[name] ?? Circle;
 }
 
+function sanitizeAll(parsed: Partial<Palette>): Palette {
+  return {
+    extreme: sanitize(parsed.extreme, DEFAULT_PRIORITY_ICONS.extreme),
+    high: sanitize(parsed.high, DEFAULT_PRIORITY_ICONS.high),
+    mid: sanitize(parsed.mid, DEFAULT_PRIORITY_ICONS.mid),
+    low: sanitize(parsed.low, DEFAULT_PRIORITY_ICONS.low),
+  };
+}
+
 function load(): Palette {
   if (typeof window === 'undefined') return { ...DEFAULT_PRIORITY_ICONS };
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_PRIORITY_ICONS };
-    const parsed = JSON.parse(raw) as Partial<Palette>;
-    return {
-      extreme: sanitize(parsed.extreme, DEFAULT_PRIORITY_ICONS.extreme),
-      high: sanitize(parsed.high, DEFAULT_PRIORITY_ICONS.high),
-      mid: sanitize(parsed.mid, DEFAULT_PRIORITY_ICONS.mid),
-      low: sanitize(parsed.low, DEFAULT_PRIORITY_ICONS.low),
-    };
+    return sanitizeAll(JSON.parse(raw) as Partial<Palette>);
   } catch {
     return { ...DEFAULT_PRIORITY_ICONS };
   }
@@ -102,26 +107,33 @@ function emit() {
   for (const l of listeners) l();
 }
 
-export function setPriorityIcon(priority: TaskPriority, name: string) {
-  const next = sanitize(name, DEFAULT_PRIORITY_ICONS[priority]);
-  if (state[priority] === next) return;
-  state = { ...state, [priority]: next };
+function commit(next: Palette, push: boolean) {
+  state = next;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Storage disabled / full — fail silent, in-memory still updates.
   }
+  if (push) pushUiPref('priorityIcons', state);
   emit();
 }
 
+export function setPriorityIcon(priority: TaskPriority, name: string) {
+  const next = sanitize(name, DEFAULT_PRIORITY_ICONS[priority]);
+  if (state[priority] === next) return;
+  commit({ ...state, [priority]: next }, true);
+}
+
 export function resetPriorityIcons() {
-  state = { ...DEFAULT_PRIORITY_ICONS };
-  try {
-    window.localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ditto
-  }
-  emit();
+  commit({ ...DEFAULT_PRIORITY_ICONS }, true);
+}
+
+/// Apply the server copy (no echo PATCH). Missing on the server = first
+/// sync from this browser, so upload the local picks instead.
+export function hydratePriorityIcons(remote: Partial<Palette> | undefined) {
+  if (isUiPrefPending('priorityIcons')) return;
+  if (!remote) return pushUiPref('priorityIcons', state);
+  commit(sanitizeAll(remote), false);
 }
 
 function subscribe(cb: () => void): () => void {
