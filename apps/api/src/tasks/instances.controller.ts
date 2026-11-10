@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   updateInstanceRequestSchema,
+  vacationSchema,
   type TaskInstanceResponse,
   type UpdateInstanceRequest,
 } from '@focus-tracker/shared';
@@ -33,6 +34,15 @@ export class InstancesController {
     @CurrentUser() user: JwtRequestContext,
   ): Promise<TaskInstanceResponse[]> {
     return this.instances.listToday(user.userId);
+  }
+
+  /// GET /v1/instances/day/:date — past-day instances for late check-ins.
+  @Get('day/:date')
+  listForDay(
+    @CurrentUser() user: JwtRequestContext,
+    @Param('date', new ZodBodyPipe(vacationSchema.shape.startDate)) date: string,
+  ): Promise<TaskInstanceResponse[]> {
+    return this.instances.listForDay(user.userId, date);
   }
 
   @Patch(':id')

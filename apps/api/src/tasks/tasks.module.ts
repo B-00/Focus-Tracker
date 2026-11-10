@@ -8,6 +8,7 @@ import { ChartsController } from './charts.controller';
 import { ChartsService } from './charts.service';
 import { MaintenanceService } from './maintenance.service';
 import { MaintenanceScheduler } from './maintenance.scheduler';
+import { VacationsController } from './vacations.controller';
 
 /// Owns `/v1/tasks/*`, `/v1/instances/*`, `/v1/backlog`, and `/v1/charts/*`.
 /// See `Tasks.md` + `TaskCharts.md`.
@@ -25,6 +26,7 @@ import { MaintenanceScheduler } from './maintenance.scheduler';
     InstancesController,
     BacklogController,
     ChartsController,
+    VacationsController,
   ],
   providers: [
     TasksService,

@@ -145,6 +145,17 @@ export { uiPrefsSchema, LIFE_SIZES } from './ui-prefs.js';
 export type { UiPrefs } from './ui-prefs.js';
 
 // ---------------------------------------------------------------------------
+//  Vacations (skip-scoring ranges) + routine backfill window
+// ---------------------------------------------------------------------------
+export {
+  vacationSchema,
+  createVacationRequestSchema,
+  VACATION_MAX_DAYS,
+  ROUTINE_BACKFILL_DAYS,
+} from './vacations.js';
+export type { Vacation, CreateVacationRequest } from './vacations.js';
+
+// ---------------------------------------------------------------------------
 //  Tasks + Sections (Tasks.md)
 // ---------------------------------------------------------------------------
 export {

@@ -1,3 +1,4 @@
+import { VacationButton } from '../components/VacationButton';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { logout as apiLogout, logoutAll as apiLogoutAll } from '../lib/auth-api';
@@ -126,6 +127,7 @@ export function SettingsPage() {
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
+          <VacationButton />
           {/* Mobile-only: the header hides its Sign out below md. */}
           <button
             type="button"

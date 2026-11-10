@@ -130,6 +130,19 @@ export class MaintenanceService {
     tz: string,
     day: string, // YYYY-MM-DD, user-local
   ): Promise<StepReport> {
+    // Vacation: skip the whole pipeline — no missed routine instances,
+    // no score rows, no transfer/backlog. Dated tasks due on a vacation
+    // day get swept by Step 3 on the first non-vacation day (`startDate
+    // <= day`) but are never scored, since Step 2 only scores `= day`.
+    if (await this.isVacationDay(userId, day)) {
+      return {
+        routineInstancesCreated: 0,
+        datedScoreRowsUpserted: 0,
+        routineScoreRowsUpserted: 0,
+        transferredCount: 0,
+        backloggedCount: 0,
+      };
+    }
     const routineInstancesCreated = await this.step1_materialiseRoutines(userId, day);
     const datedScoreRowsUpserted = await this.step2_snapshotDatedScore(userId, tz, day);
     const { transferredCount, backloggedCount } = await this.step3_transferAndBacklog(
@@ -145,6 +158,71 @@ export class MaintenanceService {
       transferredCount,
       backloggedCount,
     };
+  }
+
+  // -----------------------------------------------------------------
+  //  Retroactive edits (routine backfill + vacation add/remove)
+  // -----------------------------------------------------------------
+  //
+  // Charts re-derive running totals from the per-day score rows on read
+  // (charts.service.ts), so fixing one day's row is enough — no chain
+  // rewrite of later `runningTotal` columns needed.
+
+  /// User-local today for `userId`. Exposed for the backfill window gate.
+  async todayForUser(userId: string): Promise<string> {
+    return this.todayYmd(await this.resolveTimezone(userId));
+  }
+
+  /// Re-score one past routine day after a late check-in. If the nightly
+  /// watermark hasn't passed that day yet, run the normal catch-up instead
+  /// (writing a lone routine row early would advance the watermark and
+  /// skip that day's dated steps).
+  async rescoreRoutineDay(userId: string, day: string): Promise<void> {
+    if (await this.isVacationDay(userId, day)) return;
+    const today = await this.todayForUser(userId);
+    if (day >= today) return; // today is scored tonight
+    if (day > (await this.lastProcessedDay(userId, today))) {
+      await this.runForUser(userId);
+      return;
+    }
+    await this.step4_snapshotRoutineScore(userId, day);
+  }
+
+  /// Vacation added: drop already-written score rows inside it.
+  async clearScoresInRange(userId: string, from: string, to: string): Promise<void> {
+    const where = { userId, date: { gte: toDbDate(from), lte: toDbDate(to) } };
+    await this.prisma.$transaction([
+      this.prisma.routineSectionDailyScore.deleteMany({ where }),
+      this.prisma.datedSectionDailyScore.deleteMany({ where }),
+    ]);
+  }
+
+  /// Vacation removed: re-run the per-day pipeline for days the nightly
+  /// job already passed, then a normal catch-up for anything after the
+  /// watermark. Every step is idempotent, so overlap is harmless.
+  async reprocessRange(userId: string, from: string, to: string): Promise<void> {
+    const tz = await this.resolveTimezone(userId);
+    const today = this.todayYmd(tz);
+    const last = await this.lastProcessedDay(userId, today);
+    const end = to < last ? to : last;
+    for (let d = from; d <= end; d = addYmd(d, 1)) {
+      await this.processDay(userId, tz, d);
+    }
+    await this.runForUser(userId, tz);
+  }
+
+  private async isVacationDay(userId: string, day: string): Promise<boolean> {
+    const d = toDbDate(day);
+    const n = await this.prisma.vacation.count({
+      where: { userId, startDate: { lte: d }, endDate: { gte: d } },
+    });
+    return n > 0;
+  }
+
+  /// Last day the nightly job has already walked (yesterday when caught up).
+  private async lastProcessedDay(userId: string, today: string): Promise<string> {
+    const first = await this.resolveFirstDayToProcess(userId, today);
+    return addYmd(first ?? today, -1);
   }
 
   // -----------------------------------------------------------------

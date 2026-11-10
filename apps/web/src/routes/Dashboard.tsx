@@ -1,3 +1,4 @@
+import { VacationButton } from '../components/VacationButton';
 import type { ComponentType } from 'react';
 import {
   closestCenter,
@@ -91,7 +92,8 @@ export function DashboardPage() {
             Drag a widget by its handle to reorder.
           </p>
         </div>
-        <div className="flex items-start gap-2">
+        <div className="flex flex-wrap items-start justify-end gap-2">
+          <VacationButton />
           {isCustomized && (
             <button
               type="button"

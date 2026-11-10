@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { ROUTINE_BACKFILL_DAYS } from '@focus-tracker/shared';
+import { MaintenanceService } from './maintenance.service';
 import type {
   TaskInstance as PrismaTaskInstance,
   Prisma,
@@ -27,7 +33,40 @@ import { wallClockInTz } from '../activity/tz.util';
 /// built for Activity to stay dependency-free.
 @Injectable()
 export class InstancesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly maintenance: MaintenanceService,
+  ) {}
+
+  /// Past-day instances (materialised by the nightly job) for the
+  /// "forgot to tick it" flow. Limited to the backfill window.
+  async listForDay(userId: string, day: string): Promise<TaskInstanceResponse[]> {
+    await this.assertInBackfillWindow(userId, day);
+    const rows = await this.prisma.taskInstance.findMany({
+      where: { scheduledDate: toDbDate(day), task: { userId } },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map(toTaskInstanceResponse);
+  }
+
+  private async assertInBackfillWindow(userId: string, day: string): Promise<string> {
+    const today = await this.maintenance.todayForUser(userId);
+    const earliest = toYmd(
+      new Date(toDbDate(today).getTime() - ROUTINE_BACKFILL_DAYS * 86_400_000),
+    );
+    if (day < earliest || day > today) {
+      throw new BadRequestException({
+        error: 'validation_failed',
+        details: [
+          {
+            path: 'date',
+            message: `only the last ${ROUTINE_BACKFILL_DAYS} days can be edited`,
+          },
+        ],
+      });
+    }
+    return today;
+  }
 
   async listToday(userId: string): Promise<TaskInstanceResponse[]> {
     const user = await this.prisma.user.findUnique({
@@ -106,20 +145,32 @@ export class InstancesService {
     // simplest safe form.
     const existing = await this.prisma.taskInstance.findFirst({
       where: { id, task: { userId } },
-      select: { id: true },
+      select: { id: true, scheduledDate: true },
     });
     if (!existing) {
       throw new NotFoundException({ error: 'instance_not_found' });
     }
+    const day = toYmd(existing.scheduledDate);
+    const today = await this.assertInBackfillWindow(userId, day);
+    const late = day < today;
 
-    const data: Prisma.TaskInstanceUpdateInput = {
-      completedAt: body.completedAt === null ? null : new Date(body.completedAt),
-    };
+    // A late tick is stamped on the day it belongs to (noon UTC of that
+    // date) so anything bucketing by completedAt — e.g. the life-week
+    // heatmap — credits the right day, not today.
+    // ponytail: noon UTC lands on the same calendar day for UTC-11..+11.
+    const completedAt =
+      body.completedAt === null
+        ? null
+        : late
+          ? new Date(`${day}T12:00:00.000Z`)
+          : new Date(body.completedAt);
+    const data: Prisma.TaskInstanceUpdateInput = { completedAt };
 
     const row = await this.prisma.taskInstance.update({
       where: { id },
       data,
     });
+    if (late) await this.maintenance.rescoreRoutineDay(userId, day);
     return toTaskInstanceResponse(row);
   }
 }

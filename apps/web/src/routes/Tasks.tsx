@@ -1,3 +1,4 @@
+import { VacationButton } from '../components/VacationButton';
 import { useMemo, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -23,6 +24,7 @@ import { PRIORITY_SORT_INDEX } from './tasks/PriorityBadge';
 import { PriorityColorPicker } from './tasks/PriorityColorPicker';
 import { PriorityIconPicker } from './tasks/PriorityIconPicker';
 import { RoutineRow } from './tasks/RoutineRow';
+import { RoutineBackfill } from './tasks/RoutineBackfill';
 import { SectionBlock } from './tasks/SectionBlock';
 import { TopOfTasksCharts } from './tasks/charts/TopOfTasksCharts';
 
@@ -88,7 +90,10 @@ export function TasksPage() {
             Routine, Dated, Ongoing &mdash; with consistency charts.
           </p>
         </div>
-        <AddSectionButton />
+        <div className="flex flex-wrap items-start justify-end gap-2">
+          <VacationButton />
+          <AddSectionButton />
+        </div>
       </header>
 
       {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
@@ -209,6 +214,8 @@ function KindPanel({
           {tasks.length === 1 ? '1 task' : `${tasks.length} tasks`}
         </span>
       </header>
+
+      {kind === 'routine' && <RoutineBackfill routines={tasks} />}
 
       {sections.map((s) => (
         <SectionBlock

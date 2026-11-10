@@ -172,7 +172,24 @@ model User {
   // Dashboard prefs
   dashboardPrefs  UserDashboardPrefs?
 
+  // Vacation mode
+  vacations       Vacation[]
+
   @@index([email])
+}
+
+/// Inclusive date range where the nightly scorer skips the day entirely
+/// (no score row for dated or routine; dated tasks aren't transferred or
+/// backlogged). Owner: shared/vacations.ts.
+model Vacation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  @@index([userId, startDate])
 }
 
 /// Opaque, hashed refresh tokens issued at login and rotated on each refresh.

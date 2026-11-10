@@ -1,3 +1,4 @@
+import { VacationButton } from '../components/VacationButton';
 import {
   memo,
   useCallback,
@@ -260,10 +261,11 @@ function LifeGrid({ birthday, lifeExpectancyYears, grid }: GridProps) {
 
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-8" style={cssVars}>
-      <header className="mb-6">
+      <header className="mb-6 flex flex-col items-center gap-3">
         <h1 className="text-center text-2xl font-semibold tracking-tight">
           Your life, one week at a time
         </h1>
+        <VacationButton />
       </header>
 
       {/* Responsive layout:

@@ -1,6 +1,7 @@
+import { VacationButton } from '../components/VacationButton';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Palmtree } from 'lucide-react';
 import {
   TASK_PRIORITIES,
   type CreateTaskRequest,
@@ -14,9 +15,11 @@ import {
   deleteTask,
   listSections,
   listTasks,
+  listVacations,
   sectionsQueryKeys,
   tasksQueryKeys,
   updateTask,
+  vacationsQueryKeys,
 } from '../lib/tasks-api';
 import { PRIORITY_SORT_INDEX, PriorityIcon } from './tasks/PriorityBadge';
 import { usePriorityColors } from './tasks/priority-colors';
@@ -171,7 +174,10 @@ export function CalendarPage() {
             Dated tasks by day. Click a task row to jump to it in Tasks.
           </p>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-1">
+          <span className="mr-2">
+            <VacationButton />
+          </span>
           <button
             type="button"
             onClick={() => setCursor((d) => addMonths(d, -1))}
@@ -310,6 +316,9 @@ function WeekRow({
     CELL_MIN_HEIGHT_PX,
     CELL_BAR_TOP_PX + bars.slotCount * BAR_SLOT_STEP_PX + CELL_BAR_BOTTOM_PX,
   );
+  // Shared cache with VacationButton — adding/removing a range there
+  // repaints these cells for free.
+  const vacations = useQuery({ queryKey: vacationsQueryKeys.all, queryFn: listVacations }).data ?? [];
   return (
     <div className="relative">
       {/* Backdrop: 7 day cells, seamless — thin dividers, no gaps, so a
@@ -327,6 +336,7 @@ function WeekRow({
               ymd={ymd}
               inMonth={inMonth}
               today={today}
+              vacation={vacations.some((v) => v.startDate <= ymd && ymd <= v.endDate)}
               minHeightPx={cellMinHeight}
               tasks={tasks}
               sectionsById={sectionsById}
@@ -374,6 +384,7 @@ interface DayFrameProps {
   ymd: string;
   inMonth: boolean;
   today: boolean;
+  vacation: boolean;
   minHeightPx: number;
   tasks: TaskResponse[];
   sectionsById: Map<string, SectionResponse>;
@@ -391,6 +402,7 @@ function DayFrame({
   ymd,
   inMonth,
   today,
+  vacation,
   minHeightPx,
   tasks,
   sectionsById,
@@ -423,29 +435,32 @@ function DayFrame({
   return (
     <div
       role="gridcell"
-      aria-label={today ? `Today, ${dateLabel}` : dateLabel}
+      aria-label={`${today ? 'Today, ' : ''}${dateLabel}${vacation ? ', vacation' : ''}`}
       onClick={handleCellClick}
       style={{ minHeight: `${minHeightPx}px` }}
       className={[
         'group relative cursor-pointer p-1.5 text-xs transition-colors hover:bg-neutral-800/30',
-        // Today = soft tint + top accent line (no box outline to fight bars).
-        today
-          ? 'bg-emerald-500/5 shadow-[inset_0_2px_0_0_rgb(16_185_129)]'
-          : 'bg-neutral-900/30',
+        // Vacation = amber tint matching the Vacation button; wins the
+        // background over Today, which keeps its top accent line.
+        vacation ? 'bg-amber-400/10' : today ? 'bg-emerald-500/5' : 'bg-neutral-900/30',
+        today ? 'shadow-[inset_0_2px_0_0_rgb(16_185_129)]' : '',
       ].join(' ')}
     >
       <div
         className={`pointer-events-none mb-1 flex items-center justify-between text-[0.7rem] ${
-          today ? 'text-emerald-300' : 'text-neutral-400'
+          today ? 'text-emerald-300' : vacation ? 'text-amber-300' : 'text-neutral-400'
         } ${fadeClass}`}
       >
         <span className={today ? 'font-semibold' : ''}>{dayNum}</span>
-        {today && (
+        {today ? (
           <span className="text-[0.6rem] uppercase tracking-wider">Today</span>
+        ) : (
+          vacation && <Palmtree aria-hidden size={11} className="text-amber-300" />
         )}
       </div>
       {hasTasks && !composerOpen && (
         <DayTooltip
+          col={date.getDay()}
           dateLabel={dateLabel}
           tasks={tasks}
           sectionsById={sectionsById}
@@ -469,6 +484,7 @@ function DayFrame({
 }
 
 interface DayTooltipProps {
+  col: number; // 0 = Sun … 6 = Sat
   dateLabel: string;
   tasks: TaskResponse[];
   sectionsById: Map<string, SectionResponse>;
@@ -480,13 +496,17 @@ interface DayTooltipProps {
 // the cell; `-translate-y-full -top-2` floats it above the cell with
 // an 8px gap. `max-h-56 overflow-y-auto` guards against future days
 // with a huge pile of tasks without pushing the tooltip past the viewport.
-function DayTooltip({ dateLabel, tasks, sectionsById }: DayTooltipProps) {
+function DayTooltip({ col, dateLabel, tasks, sectionsById }: DayTooltipProps) {
   const priorityColors = usePriorityColors();
+  // Edge columns anchor to their outer cell edge so the (invisible but
+  // laid-out) 224px tooltip never sticks past the page and adds scrollbars.
+  const align =
+    col === 0 ? 'left-0' : col === 6 ? 'right-0' : 'left-1/2 -translate-x-1/2';
   return (
     <div
       role="tooltip"
       aria-hidden
-      className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 -translate-y-full -mt-2 w-56 max-h-56 overflow-y-auto rounded-md border border-neutral-700 bg-neutral-950/95 p-2 text-[0.7rem] text-neutral-100 opacity-0 shadow-xl backdrop-blur transition-opacity duration-150 group-hover:opacity-100"
+      className={`pointer-events-none absolute top-0 z-20 ${align} -translate-y-full -mt-2 w-56 max-h-56 overflow-y-auto rounded-md border border-neutral-700 bg-neutral-950/95 p-2 text-[0.7rem] text-neutral-100 opacity-0 shadow-xl backdrop-blur transition-opacity duration-150 group-hover:opacity-100`}
     >
       <p className="mb-1.5 font-medium text-neutral-300">{dateLabel}</p>
       <ul className="flex flex-col gap-1">

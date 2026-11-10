@@ -12,6 +12,8 @@ import type {
   BacklogGroupBy,
   BacklogListResponse,
   CreateSectionRequest,
+  CreateVacationRequest,
+  Vacation,
   CreateTaskRequest,
   RedateRequest,
   SectionDeleteMode,
@@ -169,6 +171,32 @@ export async function updateInstance(
     body,
   );
   return res.data;
+}
+
+/// Past-day instances for the "forgot to tick it" flow (last N days only).
+export async function listInstancesForDay(ymd: string): Promise<TaskInstanceResponse[]> {
+  const res = await api.get<TaskInstanceResponse[]>(
+    `/v1/instances/day/${encodeURIComponent(ymd)}`,
+  );
+  return res.data;
+}
+
+// ---------------------------------------------------------------------------
+//  Vacations
+// ---------------------------------------------------------------------------
+
+export const vacationsQueryKeys = { all: ['vacations'] as const };
+
+export async function listVacations(): Promise<Vacation[]> {
+  return (await api.get<Vacation[]>('/v1/vacations')).data;
+}
+
+export async function createVacation(body: CreateVacationRequest): Promise<Vacation> {
+  return (await api.post<Vacation>('/v1/vacations', body)).data;
+}
+
+export async function deleteVacation(id: string): Promise<void> {
+  await api.delete(`/v1/vacations/${encodeURIComponent(id)}`);
 }
 
 /// Mirror of toggleTaskCompletion for a routine instance.
