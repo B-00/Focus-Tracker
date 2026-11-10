@@ -19,10 +19,7 @@ import {
   updateTask,
 } from '../lib/tasks-api';
 import { PRIORITY_SORT_INDEX, PriorityIcon } from './tasks/PriorityBadge';
-import {
-  usePriorityColors,
-  withAlpha,
-} from './tasks/priority-colors';
+import { usePriorityColors } from './tasks/priority-colors';
 
 // /calendar — Slices 1–5 (Calendar.md §5 / §3 / §4.1–§4.3).
 //
@@ -82,6 +79,8 @@ const CELL_MIN_HEIGHT_PX = 96; // = 6rem, matches slices 1–4
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const INBOX_COLOR = '#737373'; // neutral-500, matches other "no section" surfaces
+
+const END_DATE_FMT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 
 export function CalendarPage() {
   // `cursor` is any day inside the month currently displayed. Separate
@@ -212,7 +211,7 @@ export function CalendarPage() {
 
         {/* Weekday header */}
         <div
-          className="grid grid-cols-7 gap-1 text-[0.65rem] font-medium uppercase tracking-wider text-neutral-500"
+          className="grid grid-cols-7 text-[0.65rem] font-medium uppercase tracking-wider text-neutral-500"
           aria-hidden
         >
           {WEEKDAY_LABELS.map((w) => (
@@ -228,7 +227,7 @@ export function CalendarPage() {
         <div
           role="grid"
           aria-label={`${monthLabel} calendar grid`}
-          className="mt-1 flex flex-col gap-1"
+          className="mt-1 divide-y divide-neutral-800 rounded-md border border-neutral-800"
         >
           {weeks.map((weekDays, weekIndex) => (
             <WeekRow
@@ -313,8 +312,9 @@ function WeekRow({
   );
   return (
     <div className="relative">
-      {/* Backdrop: 7 day cells */}
-      <div className="grid grid-cols-7 gap-1">
+      {/* Backdrop: 7 day cells, seamless — thin dividers, no gaps, so a
+          spanning bar reads as one block instead of crossing 7 cards. */}
+      <div className="grid grid-cols-7 divide-x divide-neutral-800">
         {weekDays.map((day) => {
           const ymd = toYmd(day);
           const inMonth = day.getMonth() === cursorMonth;
@@ -342,10 +342,10 @@ function WeekRow({
         })}
       </div>
       {/* Overlay: bar segments positioned over the backdrop grid. Same
-          `grid-cols-7 gap-1` so column widths & gaps line up exactly. */}
+          `grid-cols-7` (no gap) so columns line up exactly. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 grid grid-cols-7 gap-1"
+        className="pointer-events-none absolute inset-0 grid grid-cols-7"
       >
         {bars.segments.map((seg) => (
           <BarSegment
@@ -427,10 +427,11 @@ function DayFrame({
       onClick={handleCellClick}
       style={{ minHeight: `${minHeightPx}px` }}
       className={[
-        'group relative cursor-pointer rounded-md border p-1.5 text-xs',
+        'group relative cursor-pointer p-1.5 text-xs transition-colors hover:bg-neutral-800/30',
+        // Today = soft tint + top accent line (no box outline to fight bars).
         today
-          ? 'border-emerald-500/60 bg-emerald-500/5'
-          : 'border-neutral-800 bg-neutral-900/30',
+          ? 'bg-emerald-500/5 shadow-[inset_0_2px_0_0_rgb(16_185_129)]'
+          : 'bg-neutral-900/30',
       ].join(' ')}
     >
       <div
@@ -570,7 +571,9 @@ function BarSegment({ segment, weekDays, section, onRequestEdit }: BarSegmentPro
         gridColumnEnd: endCol + 2,
         marginTop: `${CELL_BAR_TOP_PX + slot * BAR_SLOT_STEP_PX}px`,
         height: `${BAR_HEIGHT_PX}px`,
-        backgroundColor: withAlpha(fill, 0.35),
+        // Opaque: the alpha tint is composited over neutral-900 so
+        // dividers / Today tint don't show through the bar.
+        backgroundColor: `color-mix(in srgb, ${fill} 35%, #171717)`,
         borderLeftColor: continuesLeft ? 'transparent' : priorityHex,
         // Round only the "real" edges of the task's full range.
         borderTopLeftRadius: continuesLeft ? 0 : '0.25rem',
@@ -579,7 +582,7 @@ function BarSegment({ segment, weekDays, section, onRequestEdit }: BarSegmentPro
         borderBottomRightRadius: continuesRight ? 0 : '0.25rem',
       }}
       className={[
-        'pointer-events-auto mx-px flex items-center gap-1 overflow-hidden border-l-2 px-1.5 text-left text-[0.7rem] focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400',
+        'pointer-events-auto mx-1 flex items-center gap-1 overflow-hidden border-l-2 px-1.5 text-left text-[0.7rem] focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400',
         completed ? 'text-neutral-400 line-through opacity-70' : 'text-neutral-100',
       ].join(' ')}
     >
@@ -592,6 +595,13 @@ function BarSegment({ segment, weekDays, section, onRequestEdit }: BarSegmentPro
         <PriorityIcon priority={task.priority} size={11} />
       </span>
       <span className="flex-1 truncate">{task.title}</span>
+      {/* Due date at the right edge of the segment holding the real end;
+          2+ cols only so a 1-day pill keeps its room for the title. */}
+      {!continuesRight && cellSpan > 1 && task.endDate && (
+        <span aria-hidden className="shrink-0 whitespace-nowrap pl-1 text-[0.65rem] text-neutral-400">
+          → {END_DATE_FMT.format(parseYmd(task.endDate))}
+        </span>
+      )}
       {continuesRight && (
         <span aria-hidden className="shrink-0 text-neutral-400">
           →
