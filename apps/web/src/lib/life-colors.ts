@@ -32,21 +32,21 @@ export type LifeColorRole =
   | 'm3';
 
 export const DEFAULT_LIFE_COLORS: Record<LifeColorRole, string> = {
-  lived: '#404040',     // neutral-700
-  thisWeek: '#34d399',  // emerald-400
+  lived: '#404040', // neutral-700
+  thisWeek: '#7e35dd', // purple-400
   remaining: '#171717', // neutral-900
   // Heatmap ramp, ascending brightness. Defaults picked distinct from
   // the current-week highlight so the brightest tier doesn't look
   // identical to --c-this on a crowded row.
-  h1: '#064e3b',        // emerald-900 (faint)
-  h2: '#047857',        // emerald-700
-  h3: '#10b981',        // emerald-500
-  h4: '#6ee7b7',        // emerald-300 (brightest)
+  h1: '#064e3b', // emerald-900 (faint)
+  h2: '#047857', // emerald-700
+  h3: '#10b981', // emerald-500
+  h4: '#6ee7b7', // emerald-300 (brightest)
   // Milestone-count dots. Distinct from heatmap greens so a busy week
   // still reads as "something marked" rather than "lots of activity".
-  m1: '#3b82f6',        // blue-500
-  m2: '#ec4899',        // pink-500
-  m3: '#f59e0b',        // amber-500
+  m1: '#3b82f6', // blue-500
+  m2: '#ec4899', // pink-500
+  m3: '#f59e0b', // amber-500
 };
 
 const STORAGE_KEY = 'ft:life-colors:v1';
