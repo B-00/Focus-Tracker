@@ -587,6 +587,11 @@ function BarSegment({ segment, weekDays, section, onRequestEdit }: BarSegmentPro
       aria-label={ariaLabel}
       title={`${task.title} · ${sectionName}`}
       style={{
+        // Pin every bar to row 1; `slot` alone sets the vertical offset.
+        // Without this, grid auto-placement drops a bar whose columns are
+        // taken by a full-width range into an implicit row 2 (+ its slot
+        // margin), pushing it out of the week.
+        gridRowStart: 1,
         gridColumnStart: startCol + 1,
         gridColumnEnd: endCol + 2,
         marginTop: `${CELL_BAR_TOP_PX + slot * BAR_SLOT_STEP_PX}px`,
