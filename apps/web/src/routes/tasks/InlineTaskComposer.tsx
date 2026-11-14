@@ -118,7 +118,8 @@ export function InlineTaskComposer({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mx-2 my-1 rounded border border-dashed border-neutral-800 px-3 py-1.5 text-left text-xs text-neutral-500 hover:border-neutral-700 hover:text-neutral-400"
+        // Same style as "Missed a check-in?" / Activity's Refresh button.
+        className="mx-2 my-1 rounded-md border border-neutral-700 px-2.5 py-1 text-left text-sm text-neutral-200 transition hover:bg-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
       >
         + Add task
       </button>

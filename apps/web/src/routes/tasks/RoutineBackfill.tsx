@@ -51,7 +51,8 @@ export function RoutineBackfill({ routines }: { routines: TaskResponse[] }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mb-2 text-xs text-neutral-500 underline-offset-2 hover:text-neutral-300 hover:underline"
+        // Same style as the Activity page's Refresh button.
+        className="mb-2 rounded-md border border-neutral-700 px-2.5 py-1 text-sm text-neutral-200 transition hover:bg-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
       >
         Missed a check-in?
       </button>
